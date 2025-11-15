@@ -11,6 +11,11 @@ build/
 *.iws
 .idea/
 
+# Large files and directories
+openlogic-openjdk-*/
+*.dill
+*.cache.dill
+
 # Android
 android/.gradle/
 android/app/build/
