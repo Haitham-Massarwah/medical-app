@@ -166,5 +166,5 @@ Write-Host "  - Local: $localPath" -ForegroundColor White
 Write-Host "  - Backup: $oneDrivePath" -ForegroundColor White
 Write-Host "  - Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor White
 Write-Host ""
-Write-Host "💡 Tip: Run this script at the end of each day to keep OneDrive backup updated." -ForegroundColor Yellow
+Write-Host "Tip: Run this script at the end of each day to keep OneDrive backup updated." -ForegroundColor Yellow
 
