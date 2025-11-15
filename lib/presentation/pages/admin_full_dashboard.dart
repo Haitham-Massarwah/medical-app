@@ -41,12 +41,13 @@ class _AdminFullDashboardState extends State<AdminFullDashboard> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'לוח בקרה מנהל - Admin Control Panel',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                          Expanded(
+                            child: Text(
+                              'לוח בקרה מנהל - Admin Control Panel',
+                              style: const TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
                             ),
                           ),
                           Row(
