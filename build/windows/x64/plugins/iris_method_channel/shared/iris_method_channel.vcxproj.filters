@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\iris_event.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\iris_life_cycle_observer.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\dart-sdk\include\dart_api_dl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\iris_event.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\iris_life_cycle_observer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\dart-sdk\include\dart_api_dl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\dart-sdk\include\dart_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\dart-sdk\include\dart_native_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\dart-sdk\include\dart_tools_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\dart-sdk\include\dart_version.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\dart-sdk\include\internal\dart_api_dl_impl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\iris_method_channel\src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{7E485114-B4F9-38AB-8C05-D953E9C61CA7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{781A4274-1D92-3482-9A99-040F094F92B9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

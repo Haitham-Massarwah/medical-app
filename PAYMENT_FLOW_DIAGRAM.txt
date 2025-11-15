@@ -1,0 +1,52 @@
+💰 PAYMENT MONEY FLOW DIAGRAM
+================================
+
+1. CUSTOMER PAYMENT PROCESS:
+   ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+   │   Customer      │───▶│  Medical App     │───▶│ Payment Gateway │
+   │   Card Details  │    │  (Your App)      │    │ (Shva/Cardcom)  │
+   └─────────────────┘    └──────────────────┘    └─────────────────┘
+                                                           │
+                                                           ▼
+   ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+   │   Your Bank     │◀───│  Gateway Bank    │◀───│ Israeli Banks   │
+   │   Account       │    │  Processing      │    │ (Visa/Master)   │
+   └─────────────────┘    └──────────────────┘    └─────────────────┘
+
+2. MONEY DISTRIBUTION:
+   Customer Payment: ₪300 (consultation fee)
+   + VAT (17%): ₪51
+   = Total: ₪351
+   
+   Gateway Commission (2.5%): ₪8.78
+   Your Net Receipt: ₪342.22
+   
+3. REAL INTEGRATION STEPS:
+   Step 1: Open merchant account with Shva or Cardcom
+   Step 2: Get your merchant ID and API keys
+   Step 3: Configure your bank account
+   Step 4: Test with small amounts
+   Step 5: Go live with real payments
+
+4. CURRENT STATUS:
+   ✅ App is ready for payment processing
+   ✅ Israeli payment gateway integration
+   ✅ VAT compliance (17%)
+   ✅ Hebrew receipts
+   ❌ Real merchant account (needs setup)
+   ❌ Real bank account (needs configuration)
+
+5. TO MAKE IT WORK:
+   - Contact Shva: https://www.shva.co.il
+   - Or Contact Cardcom: https://www.cardcom.co.il
+   - Get merchant account
+   - Update the API keys in the code
+   - Test with real payments
+
+
+
+
+
+
+
+

@@ -1,0 +1,1799 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Testing Protocol - Medical Appointment System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body { 
+            font-family: 'Arial', 'Calibri', sans-serif; 
+            font-size: 11pt; 
+            margin: 40px 60px; 
+            line-height: 1.6; 
+            color: #333;
+        }
+        h1 { 
+            font-size: 20pt; 
+            font-weight: bold; 
+            color: #2c3e50; 
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        h2 { 
+            font-size: 16pt; 
+            font-weight: bold; 
+            color: #34495e; 
+            margin-top: 35px; 
+            margin-bottom: 15px;
+            border-bottom: 2px solid #4a90e2;
+            padding-bottom: 5px;
+        }
+        h3 { 
+            font-size: 14pt; 
+            font-weight: bold; 
+            color: #555; 
+            margin-top: 30px; 
+            margin-bottom: 15px;
+        }
+        h4 { 
+            font-size: 12pt; 
+            font-weight: bold; 
+            margin-top: 20px; 
+            margin-bottom: 10px;
+        }
+        table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            margin: 20px 0; 
+            border: 2px solid #333; 
+            page-break-inside: avoid;
+            font-size: 11pt;
+        }
+        th { 
+            background-color: #4a90e2; 
+            color: white; 
+            font-weight: bold; 
+            padding: 12px 10px; 
+            border: 1px solid #333; 
+            text-align: left;
+        }
+        th:first-child {
+            width: 8%;
+            text-align: center;
+        }
+        th:nth-child(2) {
+            width: 46%;
+        }
+        th:nth-child(3) {
+            width: 46%;
+        }
+        td { 
+            padding: 10px; 
+            border: 1px solid #333; 
+            vertical-align: top;
+            text-align: left;
+        }
+        td:first-child {
+            text-align: center;
+            font-weight: bold;
+            width: 8%;
+        }
+        td:nth-child(2) {
+            width: 46%;
+        }
+        td:nth-child(3) {
+            width: 46%;
+        }
+        tr:nth-child(even) { 
+            background-color: #f9f9f9; 
+        }
+        tr:hover {
+            background-color: #f0f7ff;
+        }
+        hr { 
+            border: none; 
+            border-top: 3px solid #ddd; 
+            margin: 30px 0; 
+            page-break-after: avoid; 
+        }
+        .test-setup, .precondition { 
+            margin: 15px 0; 
+            padding: 15px; 
+            background-color: #f5f5f5; 
+            border-left: 4px solid #4a90e2;
+            border-radius: 4px;
+        }
+        code { 
+            background-color: #f0f0f0; 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+        }
+        p { 
+            margin: 12px 0; 
+            text-align: justify;
+        }
+        ul, ol { 
+            margin: 12px 0; 
+            padding-left: 35px; 
+        }
+        li { 
+            margin: 6px 0; 
+        }
+        strong {
+            font-weight: bold;
+        }
+        .metadata {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body><h1>Manual Testing Protocol</h1>
+
+<h2>Medical Appointment System</h2>
+
+<p><strong>Document Version:</strong></p>
+
+<p><strong>Date:</strong></p>
+
+<p><strong>Purpose:</strong></p>
+
+<p><strong>Target Audience:</strong></p>
+
+<hr>
+
+<h2>Test Procedures</h2>
+
+<p>This section describes the detailed test procedures for each test.</p>
+
+<p><strong>Note:</strong></p>
+
+<hr>
+
+<h2>End-to-End</h2>
+
+<p>This section describes the detailed test procedures for all cases of this test.</p>
+
+<hr>
+
+<h2>🔐 SECTION 1: AUTHENTICATION & SECURITY TESTING</h2>
+
+<hr>
+
+<h3>Successful Login as Doctor [TC-AUTH-001]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>PC/Device is powered on and ready</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Launch the Flutter application</td>
+      <td>App opens successfully, login screen appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Verify login screen appears</td>
+      <td>Login form with email and password fields is visible</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Enter doctor email: <code>doctor@medicalapp.com</code></td>
+      <td>Email field accepts input and displays the entered email</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Enter password: <code>doctor123</code></td>
+      <td>Password field accepts input (password is masked/asterisks)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Tap/Click "התחבר" (Login) button</td>
+      <td>Button responds to interaction, login process is initiated</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Wait for navigation (2-3 seconds)</td>
+      <td>Loading indicator may appear, system processes authentication</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify navigation to doctor dashboard</td>
+      <td>Doctor home screen/dashboard appears, login succeeds without errors</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify doctor information is displayed</td>
+      <td>Doctor name/email displayed in header or profile section</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify doctor-specific menu items are visible</td>
+      <td>Menu shows doctor-specific features (appointments, treatments, invitations)</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Failed Login - Invalid Credentials [TC-AUTH-002]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Application is launched</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Launch the application</td>
+      <td>Login screen appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Enter invalid email: <code>wrong@email.com</code></td>
+      <td>Email field accepts input</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Enter wrong password: <code>wrongpass</code></td>
+      <td>Password field accepts input</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Tap/Click "התחבר" button</td>
+      <td>Button responds, login attempt is initiated</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Wait for response (2-3 seconds)</td>
+      <td>System processes login attempt and validates credentials</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify error message appears</td>
+      <td>Error message displays: "שגיאה בהתחברות" or similar error message</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify user remains on login screen</td>
+      <td>User is not navigated away, remains on login page</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify fields can be cleared/edited</td>
+      <td>Email and password fields can be cleared and new values entered</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify user can retry</td>
+      <td>User can enter correct credentials and attempt login again</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Successful Login as Customer [TC-AUTH-003]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Application is launched</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Launch application</td>
+      <td>Login screen appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Enter customer email: <code>customer@medicalapp.com</code></td>
+      <td>Email entered successfully in email field</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Enter password: <code>customer123</code></td>
+      <td>Password entered successfully in password field</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Tap/Click login button</td>
+      <td>Login process is initiated</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Wait for navigation</td>
+      <td>Customer dashboard loads after authentication</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify login succeeds</td>
+      <td>No error messages, successful authentication</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify customer dashboard appears</td>
+      <td>Customer home screen/dashboard is displayed</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify customer-specific features visible</td>
+      <td>Features like "Book Appointment", "My Appointments" are visible</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Successful Login as Developer [TC-AUTH-004]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Application is launched</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Launch application</td>
+      <td>Login screen appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Enter developer email: <code>developer@medicalapp.com</code></td>
+      <td>Email entered successfully</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Enter password: <code>dev123</code></td>
+      <td>Password entered successfully</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Tap/Click login button</td>
+      <td>Login initiated</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Wait for navigation</td>
+      <td>Developer dashboard loads</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify login succeeds</td>
+      <td>No errors, successful authentication</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify developer dashboard appears</td>
+      <td>Developer home screen is displayed</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify developer controls visible</td>
+      <td>Controls for user management, system logs, payments are visible</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Logout Functionality [TC-AUTH-005]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>User is successfully logged into the application</li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login with any valid account</td>
+      <td>User is logged in and dashboard/home screen is displayed</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to user menu/profile</td>
+      <td>User menu or profile section is accessible and opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Locate logout button (🚪 icon or "התנתק" text)</td>
+      <td>Logout button/option is visible in menu</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Tap/Click logout button</td>
+      <td>Logout action is initiated</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Confirm logout if prompted</td>
+      <td>If confirmation dialog appears, confirm the logout action</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify return to login screen</td>
+      <td>Application returns to login screen</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify user is logged out</td>
+      <td>User cannot access protected features without logging in again</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify session data is cleared</td>
+      <td>User must enter credentials again to login</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Attempt to access protected page directly</td>
+      <td>Application redirects to login screen</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>👨‍⚕️ SECTION 2: DOCTOR FUNCTIONALITY TESTING</h2>
+
+<hr>
+
+<h3>Doctor Enables Online Payments [TC-DOC-001]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Doctor is successfully logged in</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as doctor</td>
+      <td>Doctor dashboard visible, user is authenticated</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to "הגדרות תורים" (Appointment Settings) or "טיפולים" (Treatments)</td>
+      <td>Settings page opens, payment configuration section is visible</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Locate "תשלום אונליין" (Online Payment) toggle</td>
+      <td>Toggle/switch is visible, currently in OFF position</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Enable the toggle (tap/click)</td>
+      <td>Toggle switches from OFF to ON position</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Verify payment configuration options appear</td>
+      <td>Price fields and payment settings become visible</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Wait 2 seconds for auto-save or manually save</td>
+      <td>Changes are saved (either automatically or via save button)</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify changes are saved</td>
+      <td>Success message appears or no error message is shown</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify payment toggle remains ON</td>
+      <td>Toggle state persists in ON position</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>(Optional) Restart app and verify persistence</td>
+      <td>Settings remain enabled after app restart</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Doctor Sets Treatment Price [TC-DOC-002]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Doctor is logged in</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as doctor</td>
+      <td>Doctor dashboard appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to treatment configuration</td>
+      <td>Treatment settings page opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Select a treatment or create new one</td>
+      <td>Treatment form/editor appears</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Enter treatment name: "ייעוץ כללי"</td>
+      <td>Name field accepts text input</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Enter price: <code>300</code> in price field</td>
+      <td>Price field accepts numeric input</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Set duration: 30 minutes</td>
+      <td>Duration selector works, duration is selected</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Tap/Click save button</td>
+      <td>Save action is initiated</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify treatment appears in list</td>
+      <td>Treatment is visible in treatments list with price displayed</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify price format is correct</td>
+      <td>Price displays as "₪ 300" or "300 ILS"</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Doctor Disables Payments - Price Fields Hidden [TC-DOC-003]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Doctor is logged in</li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as doctor</td>
+      <td>Doctor dashboard visible</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to appointment settings</td>
+      <td>Settings page opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Locate "תשלום אונליין" toggle</td>
+      <td>Toggle is visible (may be ON or OFF)</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Disable toggle (ensure it's OFF)</td>
+      <td>Toggle switches to OFF position</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Navigate to treatment settings</td>
+      <td>Treatment page opens</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify price fields are hidden or disabled</td>
+      <td>Price input fields are not visible or are disabled</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify message appears</td>
+      <td>Message "תשלום זמין רק בקליניקה" is displayed</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify previously set prices are hidden</td>
+      <td>Price values are not displayed in UI</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>📧 SECTION 3: DOCTOR INVITATION TESTING</h2>
+
+<hr>
+
+<h3>Doctor Sends Customer Invitation [TC-INV-001]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Doctor is logged in</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as doctor</td>
+      <td>Doctor dashboard visible</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to "הזמן לקוח" (Invite Customer) section</td>
+      <td>Invitation page/form opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Enter customer email: <code>newcustomer@example.com</code></td>
+      <td>Email field accepts input</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Optionally add customer name</td>
+      <td>Name field accepts input (if available)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Tap/Click "שלח הזמנה" (Send Invitation) button</td>
+      <td>Button responds, invitation process is initiated</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Wait for response (3-5 seconds)</td>
+      <td>System processes invitation, generates token</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify success message appears</td>
+      <td>Success message: "הזמנה נשלחה בהצלחה" is displayed</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Check email inbox (if accessible)</td>
+      <td>Invitation email is received at specified address</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify invitation link contains token</td>
+      <td>Email contains registration link with valid token</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Verify invitation appears in sent invitations list</td>
+      <td>Invitation is listed in doctor's sent invitations</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Doctor Invites with Invalid Email - Error [TC-INV-002]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Doctor is logged in</li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as doctor</td>
+      <td>Doctor dashboard visible</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to invite customer</td>
+      <td>Invitation form opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Enter invalid email: <code>not-an-email</code></td>
+      <td>Email field accepts input</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Attempt to send invitation (tap send button)</td>
+      <td>System validates email format</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Verify validation error appears</td>
+      <td>Error message: "כתובת אימייל לא תקינה" is displayed</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify send button is disabled or shows error</td>
+      <td>"שלח הזמנה" button is disabled or shows error state</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify user can correct email</td>
+      <td>User can edit email field and enter valid format</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Enter valid email format</td>
+      <td>Validation passes, user can proceed</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>👤 SECTION 4: CUSTOMER FUNCTIONALITY TESTING</h2>
+
+<hr>
+
+<h3>Customer Views Doctor with Prices [TC-BOOK-001]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Customer is logged in</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as customer</td>
+      <td>Customer dashboard appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to "קבע תור" (Book Appointment)</td>
+      <td>Booking page opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Browse available doctors</td>
+      <td>Doctor list is displayed</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Select a doctor who has payments enabled</td>
+      <td>Doctor profile/details page opens</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>View doctor profile/treatment options</td>
+      <td>Treatment list with prices is visible</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify doctor list displays correctly</td>
+      <td>Doctor cards show name, specialty, photo</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Verify prices are visible</td>
+      <td>Prices displayed clearly (e.g., "₪ 300 לייעוץ כללי")</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Verify different prices for different treatments</td>
+      <td>Multiple treatments show different prices</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Customer Books Appointment [TC-BOOK-002]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Customer is logged in</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as customer</td>
+      <td>Customer dashboard appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to "קבע תור"</td>
+      <td>Booking page opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Select a doctor</td>
+      <td>Doctor profile opens</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Choose treatment type</td>
+      <td>Treatment is selected from available options</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Select available date from calendar</td>
+      <td>Date picker opens, date is selected</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Select available time slot</td>
+      <td>Time slot is selected from available times</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>If payment required, complete payment flow</td>
+      <td>Payment form/process appears, payment is processed</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Tap/Click confirm booking</td>
+      <td>Booking confirmation screen appears</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify booking is saved</td>
+      <td>Booking is saved in system, confirmation message appears</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Verify appointment in "התורים שלי"</td>
+      <td>Appointment appears in customer's appointment list</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>Verify doctor sees new appointment</td>
+      <td>Doctor's calendar shows the new appointment</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>🌐 SECTION 5: WEB REGISTRATION TESTING</h2>
+
+<hr>
+
+<h3>Customer Registration via Invitation Link - Valid Token [TC-REG-001]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Web browser (Chrome, Firefox, Edge)</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Invitation email has been sent (from TC-INV-001)</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Open invitation email</td>
+      <td>Email is readable, registration link is visible</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Click registration link</td>
+      <td>Link opens in browser, registration page loads</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Verify registration page loads</td>
+      <td>Registration form appears, page is mobile-friendly</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Fill in name field: "Test Customer"</td>
+      <td>Name entered successfully</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Enter password: <code>Test1234!</code></td>
+      <td>Password entered (masked/asterisks)</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Confirm password: <code>Test1234!</code></td>
+      <td>Confirmation password entered</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Optionally enter phone number</td>
+      <td>Phone field accepts input (if available)</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Submit registration form</td>
+      <td>Form submission is processed</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify registration succeeds</td>
+      <td>Success message appears or redirect to login occurs</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Verify user is created in database</td>
+      <td>User record exists in database</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>Verify token is marked as "used"</td>
+      <td>Token status is updated to "used" in database</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>Attempt to login with new credentials</td>
+      <td>Login succeeds with new email and password</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Registration Link Validation - Expired Token [TC-REG-002]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Web browser (Chrome, Firefox, Edge)</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Invitation token exists but is expired</li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Open registration link with expired token</td>
+      <td>Link opens in browser</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Verify error message appears</td>
+      <td>Error message: "הזמנה פגה" or "Invitation expired" is displayed</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Verify registration form is disabled or not accessible</td>
+      <td>Form cannot be filled or submitted</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Verify option to request new invitation</td>
+      <td>Option to request new invitation is available (if implemented)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Verify user cannot register</td>
+      <td>Registration cannot proceed with expired token</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>🛠️ SECTION 6: DEVELOPER FUNCTIONALITY TESTING</h2>
+
+<hr>
+
+<h3>Developer Overrides Payment Settings [TC-DEV-004]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Developer is logged in</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Login as developer</td>
+      <td>Developer dashboard appears</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Navigate to "תשלומים" (Payments) or payment management</td>
+      <td>Payment management page opens</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Select a doctor from list</td>
+      <td>Doctor details/controls are visible</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Locate payment override toggle</td>
+      <td>Override toggle is visible for doctor</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Toggle payment override (force enable payments)</td>
+      <td>Override is activated, toggle switches to ON</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Save changes</td>
+      <td>Changes are saved successfully</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Logout and login as customer</td>
+      <td>Customer dashboard appears</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Navigate to booking page and select the doctor</td>
+      <td>Doctor profile is accessible</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify prices are visible for that doctor</td>
+      <td>Prices are displayed for customer even if doctor disabled them</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Verify override takes effect immediately</td>
+      <td>Changes are reflected without delay</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>⚠️ SECTION 7: FAILURE SCENARIOS TESTING</h2>
+
+<hr>
+
+<h3>Network Error Handling [TC-FAIL-001]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Application is running</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Start app and login</td>
+      <td>User is logged in, dashboard is visible</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Disconnect internet (turn off WiFi/disable network)</td>
+      <td>Network is disconnected</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Attempt to book appointment</td>
+      <td>Network error handling is triggered</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Attempt to send invitation</td>
+      <td>Error message appears: "אין חיבור לאינטרנט" or "Network error"</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Attempt to view appointments</td>
+      <td>Error is handled gracefully, no crash occurs</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify app does not crash</td>
+      <td>Application remains stable, shows error message</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Reconnect network</td>
+      <td>Network is restored</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Retry actions</td>
+      <td>Actions succeed after network is restored</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Verify data is not lost</td>
+      <td>Form data is preserved (if applicable)</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Verify app syncs when network restored</td>
+      <td>Data syncs automatically or on retry</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>Form Validation - Empty Fields [TC-FAIL-004]</h3>
+
+<p><strong>Designed by:</strong></p>
+
+<p><strong>Date of review:</strong></p>
+
+<p><strong>Reviewed and approved by:</strong></p>
+
+<hr>
+
+<h4>Test Setup:</h4>
+
+<ul>
+  <li>Flutter application installed and ready to launch</li>
+  <li></li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Pre-condition(s):</h4>
+
+<ul>
+  <li>Application is launched</li>
+  <li></li>
+  <li></li>
+</ul>
+
+<hr>
+
+<h4>Steps:</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Procedure Action</th>
+      <th>Expected Results</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Attempt to submit login form without email/password</td>
+      <td>Required field indicators appear</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Attempt to submit registration without name</td>
+      <td>Error message: "שדה זה חובה" is displayed</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Attempt to book appointment without date selection</td>
+      <td>Validation prevents submission</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Attempt to send invitation without email</td>
+      <td>Error message appears for empty email field</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Verify submit button is disabled or shows error</td>
+      <td>Submit button is disabled or shows error state</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Verify clear error messages</td>
+      <td>Error messages are clear and indicate which fields are required</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Fill required fields</td>
+      <td>Validation passes, user can proceed</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>📊 TEST EXECUTION SUMMARY</h2>
+
+<h3>Overall Test Results</h3>
+
+<h3>Test Session Information</h3>
+
+<hr>
+
+<h2>✅ Sign-off</h2>
+
+<hr>
+
+<p><strong>End of Manual Testing Protocol</strong></p>
+
+<p><strong>Last Updated:</strong></p>
+
+</body>
+</html>

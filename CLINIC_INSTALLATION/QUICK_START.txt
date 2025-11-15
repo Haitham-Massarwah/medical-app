@@ -1,0 +1,50 @@
+========================================
+  MEDICAL APPOINTMENT SYSTEM
+  Quick Start Guide for Clinics
+========================================
+
+STEP 1: INSTALLATION
+--------------------
+Double-click: INSTALL_CLINIC.bat
+Wait 10-15 minutes for installation
+
+STEP 2: FIRST LAUNCH
+--------------------
+1. Double-click: START_BACKEND.bat
+   (Keep this window open)
+
+2. Double-click: START_APP.bat
+   (Or use Desktop shortcut)
+
+STEP 3: FIRST LOGIN (AUTOMATIC ROLE DETECTION)
+-----------------------------------------------
+Admin Account (Full Control):
+  Email: haitham.massarwah@medical-appointments.com
+  Password: Developer@2024
+  → Goes directly to Admin Control Panel (automatic)
+
+Test Doctor Account:
+  Email: doctor.example@medical-appointments.com
+  Password: Doctor@123
+  → Goes directly to Doctor Dashboard (automatic)
+
+Test Patient Account:
+  Email: patient.example@medical-appointments.com
+  Password: Patient@123
+  → Goes directly to Patient Interface (automatic)
+
+NOTE: NO role selection dialog - the system knows your role!
+
+STEP 4: CHANGE PASSWORD
+-----------------------
+1. Login with your account
+2. Go to Settings
+3. Change password immediately
+
+========================================
+NEED HELP?
+- See: README_INSTALLATION.md
+- Troubleshooting: TROUBLESHOOTING.md
+- Check Installation: CHECK_INSTALLATION.bat
+========================================
+

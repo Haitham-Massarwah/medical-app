@@ -1,0 +1,280 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Profile|x64">
+      <Configuration>Profile</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{ED4103EB-97AB-3E80-A789-3E164627449C}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Platform>x64</Platform>
+    <ProjectName>agora_rtc_engine_plugin</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Profile|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Projects\medical-app\build\windows\x64\plugins\agora_rtc_engine\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">agora_rtc_engine_plugin.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">agora_rtc_engine_plugin</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.dll</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">C:\Projects\medical-app\build\windows\x64\plugins\agora_rtc_engine\Profile\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">agora_rtc_engine_plugin.dir\Profile\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">agora_rtc_engine_plugin</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">.dll</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Projects\medical-app\build\windows\x64\plugins\agora_rtc_engine\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">agora_rtc_engine_plugin.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">agora_rtc_engine_plugin</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.dll</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4819;"4100"</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_HAS_EXCEPTIONS=0;_DEBUG;FLUTTER_PLUGIN_IMPL;UNICODE;_UNICODE;CMAKE_INTDIR="Debug";agora_rtc_engine_plugin_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_HAS_EXCEPTIONS=0;FLUTTER_PLUGIN_IMPL;UNICODE;_UNICODE;CMAKE_INTDIR=\"Debug\";agora_rtc_engine_plugin_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>..\..\flutter\Debug\flutter_wrapper_plugin.lib;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\Release\AgoraRtcWrapper.lib;C:\Projects\medical-app\windows\flutter\ephemeral\flutter_windows.dll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/Debug/agora_rtc_engine_plugin.lib</ImportLibrary>
+      <ProgramDataBaseFile>C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/Debug/agora_rtc_engine_plugin.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DisableSpecificWarnings>4819;"4100"</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;_HAS_EXCEPTIONS=0;FLUTTER_PLUGIN_IMPL;UNICODE;_UNICODE;CMAKE_INTDIR="Profile";agora_rtc_engine_plugin_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;_HAS_EXCEPTIONS=0;FLUTTER_PLUGIN_IMPL;UNICODE;_UNICODE;CMAKE_INTDIR=\"Profile\";agora_rtc_engine_plugin_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>..\..\flutter\Profile\flutter_wrapper_plugin.lib;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\Release\AgoraRtcWrapper.lib;C:\Projects\medical-app\windows\flutter\ephemeral\flutter_windows.dll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/Profile/agora_rtc_engine_plugin.lib</ImportLibrary>
+      <ProgramDataBaseFile>C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/Profile/agora_rtc_engine_plugin.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DisableSpecificWarnings>4819;"4100"</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;_HAS_EXCEPTIONS=0;FLUTTER_PLUGIN_IMPL;UNICODE;_UNICODE;CMAKE_INTDIR="Release";agora_rtc_engine_plugin_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;_HAS_EXCEPTIONS=0;FLUTTER_PLUGIN_IMPL;UNICODE;_UNICODE;CMAKE_INTDIR=\"Release\";agora_rtc_engine_plugin_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\include;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\native\lib\Agora_Native_SDK_for_Windows_FULL\sdk\high_level_api\include;C:\Projects\medical-app\windows\flutter\ephemeral;C:\Projects\medical-app\windows\flutter\ephemeral\cpp_client_wrapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>..\..\flutter\Release\flutter_wrapper_plugin.lib;C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\third_party\iris\lib\iris_4.5.2-build.1_DCG_Windows\x64\Release\AgoraRtcWrapper.lib;C:\Projects\medical-app\windows\flutter\ephemeral\flutter_windows.dll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/Release/agora_rtc_engine_plugin.lib</ImportLibrary>
+      <ProgramDataBaseFile>C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/Release/agora_rtc_engine_plugin.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\CMakeLists.txt">
+      <StdOutEncoding>UTF-8</StdOutEncoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/Projects/medical-app/windows/flutter/ephemeral/.plugin_symlinks/agora_rtc_engine/windows/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Projects/medical-app/windows -BC:/Projects/medical-app/build/windows/x64 --check-stamp-file C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\cmake\DownloadSDK.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Projects\medical-app\build\windows\x64\plugins\agora_rtc_engine\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">Building Custom Rule C:/Projects/medical-app/windows/flutter/ephemeral/.plugin_symlinks/agora_rtc_engine/windows/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Projects/medical-app/windows -BC:/Projects/medical-app/build/windows/x64 --check-stamp-file C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\cmake\DownloadSDK.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">C:\Projects\medical-app\build\windows\x64\plugins\agora_rtc_engine\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/Projects/medical-app/windows/flutter/ephemeral/.plugin_symlinks/agora_rtc_engine/windows/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Projects/medical-app/windows -BC:/Projects/medical-app/build/windows/x64 --check-stamp-file C:/Projects/medical-app/build/windows/x64/plugins/agora_rtc_engine/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\cmake\DownloadSDK.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Projects\medical-app\build\windows\x64\plugins\agora_rtc_engine\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\agora_rtc_engine_plugin.cpp" />
+    <ClCompile Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\texture_render.cc" />
+    <ClCompile Include="C:\Projects\medical-app\windows\flutter\ephemeral\.plugin_symlinks\agora_rtc_engine\windows\video_view_controller.cc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="C:\Projects\medical-app\build\windows\x64\ZERO_CHECK.vcxproj">
+      <Project>{ED1F381B-098F-3651-B250-8DE49DC4EF7B}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="C:\Projects\medical-app\build\windows\x64\flutter\flutter_assemble.vcxproj">
+      <Project>{2AE3A9D8-EF04-3991-983B-C01EEED1A9CA}</Project>
+      <Name>flutter_assemble</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="C:\Projects\medical-app\build\windows\x64\flutter\flutter_wrapper_plugin.vcxproj">
+      <Project>{5266F9B0-49CF-3148-B408-52AB770AB089}</Project>
+      <Name>flutter_wrapper_plugin</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

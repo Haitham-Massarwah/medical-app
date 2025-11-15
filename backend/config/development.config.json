@@ -1,0 +1,112 @@
+{
+  "environment": "development",
+  "description": "Central configuration file for development environment",
+  "lastUpdated": "2025-11-12",
+  
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "medical_appointments_dev",
+    "user": "medical_admin",
+    "password": "Haitham@0412",
+    "ssl": false
+  },
+  
+  "server": {
+    "port": 3000,
+    "baseUrl": "http://localhost:3000",
+    "apiVersion": "v1",
+    "corsOrigin": "http://localhost:*"
+  },
+  
+  "email": {
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "secure": false,
+      "user": "hn.medicalapoointments@gmail.com",
+      "password": "rglhqfxrgapnihuv"
+    },
+    "from": "Medical Appointments <hn.medicalapoointments@gmail.com>",
+    "allowedAddresses": [
+      "haitham.massarwah@medical-appointments.com",
+      "hn.medicalapoointments@gmail.com"
+    ]
+  },
+  
+  "demoAccounts": {
+    "enabled": true,
+    "description": "Demo accounts created only in development environment",
+    "accounts": [
+      {
+        "email": "demo.doctor@medical-appointments.com",
+        "password": "DemoDoctor@2024",
+        "role": "doctor",
+        "firstName": "ד\"ר דמו",
+        "lastName": "רופא",
+        "specialty": "רפואה משפחתית",
+        "licenseNumber": "DEMO-DOC-001"
+      },
+      {
+        "email": "demo.patient@medical-appointments.com",
+        "password": "DemoPatient@2024",
+        "role": "patient",
+        "firstName": "דמו",
+        "lastName": "מטופל",
+        "phone": "+972-50-0000000"
+      }
+    ]
+  },
+  
+  "developerAccount": {
+    "email": "haitham.massarwah@medical-appointments.com",
+    "password": "Developer@2024",
+    "role": "developer",
+    "firstName": "Haitham",
+    "lastName": "Massarwah"
+  },
+  
+  "payment": {
+    "stripe": {
+      "secretKey": "",
+      "publishableKey": "",
+      "webhookSecret": "",
+      "mode": "test"
+    }
+  },
+  
+  "notifications": {
+    "twilio": {
+      "accountSid": "AC22fc8395b3e91855cf37fdcb48111d5b",
+      "authToken": "03c3053425a39802b291622555b8c669",
+      "phoneNumber": "",
+      "whatsappNumber": ""
+    }
+  },
+  
+  "calendar": {
+    "google": {
+      "clientId": "460829863462-cld9ijbevsa23fiphrbi1po9al23l0ae.apps.googleusercontent.com",
+      "clientSecret": "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",
+      "redirectUri": "http://localhost:3000/api/v1/calendar/google/callback"
+    },
+    "outlook": {
+      "clientId": "32ca22ee-219b-4000-b429-17e9b56aedda",
+      "clientSecret": "dVi8Q~1g0CgWlcWznXFXXqDxwU7k2xHyVZeh.afX",
+      "redirectUri": "http://localhost:3000/api/v1/calendar/outlook/callback"
+    }
+  },
+  
+  "security": {
+    "jwtSecret": "development-secret-key-change-in-production",
+    "jwtExpiration": "24h",
+    "bcryptRounds": 12
+  },
+  
+  "logging": {
+    "level": "debug",
+    "file": "logs/development.log",
+    "console": true
+  }
+}
+

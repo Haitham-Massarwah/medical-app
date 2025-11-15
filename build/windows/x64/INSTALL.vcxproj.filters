@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Projects\medical-app\build\windows\x64\CMakeFiles\68f04acc730f7c986f16a8745694c611\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{F31DB963-5769-39D7-B9E8-98FEBC2BCD19}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,397 @@
+# 📊 COMPLETE APP FLOWCHART
+
+## 🗺️ APPLICATION FLOW DIAGRAM
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      APP STARTUP                            │
+│                                                              │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │  Check First Launch                                 │   │
+│  └───────────────────────┬────────────────────────────┘   │
+│                          │                                 │
+│                ┌─────────▼──────────┐                     │
+│                │  First Time?       │                     │
+│                └──┬─────────────┬───┘                     │
+│                   │ NO         │ YES                      │
+│                   ▼            ▼                          │
+│         ┌──────────────┐  ┌────────────────────┐         │
+│         │  Load User    │  │  Show Intro        │         │
+│         │  Session      │  │  Welcome + Features│         │
+│         │               │  │  Language Selection│         │
+│         └──────┬────────┘  │  Set Preferences   │         │
+│                │            └────────┬───────────┘         │
+│                │                     │                     │
+│                └───────────┬─────────┘                     │
+│                            ▼                               │
+│                    ┌─────────────┐                         │
+│                    │  LOGIN PAGE │                         │
+│                    │  (Hebrew)   │                         │
+│                    └──────┬──────┘                         │
+└───────────────────────────┼───────────────────────────────┘
+                            │
+                ┌───────────┴───────────┐
+                │                       │
+          ┌─────▼──────┐        ┌──────▼──────┐
+          │   Patient  │        │   Doctor    │
+          │  Login     │        │   Login     │
+          └─────┬──────┘        └──────┬──────┘
+                │                      │
+                └───────┬──────────────┘
+                        │
+                ┌───────▼───────┐
+                │ Auto-Detect   │
+                │ Role by Email │
+                └───────┬───────┘
+                        │
+        ┌───────────────┴───────────────┐
+        │                               │
+┌───────▼────────┐           ┌─────────▼────────┐
+│   PATIENT HOME │           │  DOCTOR DASHBOARD│
+│                │           │                  │
+│  🔍 Browse     │           │  📋 Appointments│
+│  📅 Book       │           │  👥 Patients     │
+│  🗓️ My Appts  │           │  ⚙️  Settings    │
+│  ⚙️  Settings  │           │  📊 Analytics   │
+└────────┬───────┘           └──────┬───────────┘
+         │                          │
+         └──────────┬───────────────┘
+                    │
+            ┌───────▼─────────┐
+            │  BOOK APPOINTMENT│
+            │                  │
+            │  1. Select Doctor│
+            │  2. Choose Date  │
+            │  3. Select Time  │
+            │  4. Add to Cart  │
+            │  5. Checkout     │
+            └───────┬──────────┘
+                    │
+            ┌───────▼──────────┐
+            │  PAYMENT PROCESS │
+            │                  │
+            │  💳 Stripe      │
+            │  ✅ Confirm     │
+            │  📧 Notify      │
+            └───────┬─────────┘
+                    │
+            ┌───────▼──────────┐
+            │  APPOINTMENT     │
+            │  CONFIRMED       │
+            │                  │
+            │  ✅ In Calendar  │
+            │  📧 Email Sent   │
+            │  💬 SMS Sent    │
+            └───────┬──────────┘
+                    │
+            ┌───────▼──────────┐
+            │  NAVIGATE TO    │
+            │  CLINIC (WAZE)  │
+            │                  │
+            │  🗺️ Open Waze   │
+            │  📍 Get Route   │
+            │  🚗 Navigate    │
+            └─────────────────┘
+```
+
+---
+
+## 🔄 USER ROLES FLOWCHART
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                      USER ROLES                          │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐
+│    PATIENT       │  │     DOCTOR       │  │  DEVELOPER   │
+├──────────────────┤  ├──────────────────┤  ├──────────────┤
+│ • Browse doctors │  │ • Manage patients│  │ • Full access │
+│ • Book appts     │  │ • View calendar  │  │ • DB control │
+│ • Manage appts   │  │ • Create patients│  │ • Config sys  │
+│ • View history   │  │ • Set availability│ │ • Specialty  │
+│ • Payments       │  │ • Handle bookings│ │  management  │
+└────────┬─────────┘  └────────┬─────────┘  └──────┬───────┘
+         │                     │                    │
+         └─────────────────────┴────────────────────┘
+                        │
+                  ┌─────▼──────┐
+                  │  APPOINTMENTS │
+                  │  TABLE       │
+                  │              │
+                  │  • Status    │
+                  │  • Time      │
+                  │  • Location  │
+                  │  • Payment   │
+                  └─────────────┘
+```
+
+---
+
+## 🔐 AUTHENTICATION FLOW
+
+```
+START
+  │
+  ▼
+┌─────────────┐
+│  LOGIN PAGE │
+└──────┬──────┘
+       │
+       ▼
+┌──────────────────┐
+│ Enter Email/Pass │
+└──────┬───────────┘
+       │
+       ▼
+┌─────────────────────────┐
+│ Check Developer Email?  │
+└──┬─────────────┬────────┘
+   │ YES         │ NO
+   ▼             ▼
+┌──────────┐  ┌──────────────┐
+│ DEVELOPER│  │  Check Role  │
+│ MODE ON  │  │  (Database)  │
+└────┬─────┘  └──────┬───────┘
+     │               │
+     └───────┬───────┘
+             ▼
+       ┌──────────────┐
+       │ Load User    │
+       │ Dashboard    │
+       └──────────────┘
+```
+
+---
+
+## 📅 APPOINTMENT BOOKING FLOW
+
+```
+START
+  │
+  ▼
+┌─────────────────┐
+│ Select Specialty│
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Browse Doctors  │
+│ (Filtered)      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ View Availability│
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Select Date/Time │
+│ Add to Cart      │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Review & Checkout│
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Payment (Stripe) │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  CONFIRMED       │
+│  Notifications   │
+└──────────────────┘
+```
+
+---
+
+## 🎛️ DEVELOPER SPECIALTY CONTROL
+
+```
+DEVELOPER CONTROL PANEL
+  │
+  ▼
+┌────────────────────────┐
+│ Specialty Settings     │
+└────────┬───────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│ Checkboxes Display  │
+│  • Select All       │
+│  • Deselect All     │
+│  • Individual       │
+└──────┬──────────────┘
+       │
+       ▼
+┌──────────────────────┐
+│ Save Settings        │
+│ → SharedPreferences  │
+└──────┬───────────────┘
+       │
+       ▼
+┌──────────────────────┐
+│ SYNC COMPLETE        │
+│  • Customer view     │
+│  • Doctor options    │
+│  • Search filters    │
+└──────────────────────┘
+```
+
+---
+
+## 💳 PAYMENT FLOW
+
+```
+APPOINTMENT BOOKED
+  │
+  ▼
+┌──────────────────┐
+│ Calculate Amount │
+│ + Fees           │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Stripe Request   │
+│ Payment Intent   │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Process Card     │
+│ Verification     │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  SUCCESS/Failed  │
+└────┬─────────┬───┘
+     │ SUCCESS │ FAIL
+     ▼         ▼
+┌────────┐  ┌──────────┐
+│ Confirm│  │ Show     │
+│ Booking│  │ Error    │
+│ Send   │  │ Retry    │
+│ Receipt│  └──────────┘
+└────────┘
+```
+
+---
+
+## 🌍 MULTI-LANGUAGE SUPPORT
+
+```
+APP STARTUP
+  │
+  ▼
+┌─────────────────────┐
+│ Detect System       │
+│ Language            │
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│ Set Locale:         │
+│  • Hebrew (RTL) ⭐  │
+│  • Arabic (RTL)     │
+│  • English (LTR)    │
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│ Load Translations   │
+│ Apply Text Direction│
+│ Render UI           │
+└─────────────────────┘
+```
+
+---
+
+## 📊 COMPLETE SYSTEM ARCHITECTURE
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    FRONTEND (Flutter)                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
+│  │  Patient │  │  Doctor  │  │Developer │              │
+│  │   View   │  │ Dashboard│  │  Panel   │              │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘              │
+│       │             │             │                     │
+└───────┼─────────────┼─────────────┼─────────────────────┘
+        │             │             │
+        └─────────────┴─────────────┘
+                      │
+                     ▼
+        ┌─────────────────────────┐
+        │    API (Node.js/TS)     │
+        │    • Authentication     │
+        │    • Authorization      │
+        │    • Business Logic     │
+        └────────────┬────────────┘
+                     │
+        ┌────────────┴────────────┐
+        │                         │
+        ▼                         ▼
+┌──────────────┐          ┌──────────────┐
+│  PostgreSQL  │          │    Redis     │
+│  Database    │          │    Cache     │
+└──────────────┘          └──────────────┘
+        │
+        └──────────┬──────────────┘
+                   │
+                   ▼
+        ┌─────────────────────────┐
+        │   External Services     │
+        │   • Stripe (Payments)   │
+        │   • Twilio (SMS/WA)     │
+        │   • Email (SendGrid)    │
+        │   • Waze (Navigation)   │
+        └─────────────────────────┘
+```
+
+---
+
+## 🎯 KEY USER FLOWS SUMMARIZED
+
+### Patient Flow:
+1. Login (Hebrew default)
+2. Browse approved specialties
+3. Select doctor
+4. View availability
+5. Book appointment
+6. Pay via Stripe
+7. Receive confirmations
+8. Navigate with Waze
+
+### Doctor Flow:
+1. Login to dashboard
+2. View appointments
+3. Create/manage patients
+4. Configure availability
+5. Manage services
+6. Set treatment durations
+7. Handle subscriptions
+
+### Developer Flow:
+1. Auto-activate developer mode
+2. Access control panel
+3. Manage specialties (checkboxes)
+4. Configure system settings
+5. Monitor database
+6. View analytics
+
+---
+
+**Complete system flow documented!** All user journeys are covered.
+
+
+
+
+
+

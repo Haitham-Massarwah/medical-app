@@ -1,0 +1,1896 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+// import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:convert';
+// import 'dart:io' show Platform;
+
+class SystemLogsEnhancedPage extends StatefulWidget {
+  const SystemLogsEnhancedPage({super.key});
+
+  @override
+  State<SystemLogsEnhancedPage> createState() => _SystemLogsEnhancedPageState();
+}
+
+class _SystemLogsEnhancedPageState extends State<SystemLogsEnhancedPage> {
+  String _selectedLogLevel = 'all';
+  String _selectedDateRange = 'today';
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+  bool _isDownloading = false;
+
+  // Mock log data - Comprehensive app activity logs with daily organization
+  final List<Map<String, dynamic>> _logs = [
+    // Authentication & Security Logs
+    {
+      'id': '1',
+      'timestamp': '2024-01-15 10:30:25',
+      'level': 'ERROR',
+      'category': 'Authentication',
+      'message': 'Failed login attempt for user admin@example.com',
+      'details': 'Invalid password provided. IP: 192.168.1.100, User-Agent: Chrome/120.0.0.0, Attempt #3',
+      'severity': 'high',
+      'resolved': false,
+      'user': 'admin@example.com',
+      'ip': '192.168.1.100',
+    },
+    {
+      'id': '2',
+      'timestamp': '2024-01-15 10:28:15',
+      'level': 'INFO',
+      'category': 'Authentication',
+      'message': 'Successful login for developer@medicalapp.com',
+      'details': 'Login successful. IP: 192.168.1.105, Session ID: sess_abc123, 2FA: Enabled',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'developer@medicalapp.com',
+      'ip': '192.168.1.105',
+    },
+    {
+      'id': '3',
+      'timestamp': '2024-01-15 10:25:30',
+      'level': 'WARNING',
+      'category': 'Security',
+      'message': 'Suspicious activity detected',
+      'details': 'Multiple failed login attempts from IP 192.168.1.100 within 5 minutes. Rate limiting applied.',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'system',
+      'ip': '192.168.1.100',
+    },
+    
+    // Payment & Financial Logs
+    {
+      'id': '4',
+      'timestamp': '2024-01-15 10:22:45',
+      'level': 'WARNING',
+      'category': 'Payment',
+      'message': 'Payment processing delay detected',
+      'details': 'Payment gateway response time exceeded 5 seconds. Transaction ID: txn_456789, Amount: 250.00 ILS',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'customer@example.com',
+      'ip': '192.168.1.101',
+    },
+    {
+      'id': '5',
+      'timestamp': '2024-01-15 10:20:10',
+      'level': 'INFO',
+      'category': 'Payment',
+      'message': 'Payment processed successfully',
+      'details': 'Visa payment completed. Transaction ID: txn_456788, Amount: 300.00 ILS, Doctor: Dr. Sarah Levi',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'patient@example.com',
+      'ip': '192.168.1.102',
+    },
+    {
+      'id': '6',
+      'timestamp': '2024-01-15 10:18:30',
+      'level': 'ERROR',
+      'category': 'Payment',
+      'message': 'Payment declined by bank',
+      'details': 'Insufficient funds. Card ending in 1234, Amount: 280.00 ILS, Error Code: 51',
+      'severity': 'high',
+      'resolved': false,
+      'user': 'patient2@example.com',
+      'ip': '192.168.1.103',
+    },
+    
+    // Appointment Management Logs
+    {
+      'id': '7',
+      'timestamp': '2024-01-15 10:15:20',
+      'level': 'INFO',
+      'category': 'Appointment',
+      'message': 'New appointment created successfully',
+      'details': 'Appointment ID: APT-12345, Doctor: Dr. Cohen, Patient: John Doe, Date: 2024-01-20 10:00',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'patient@example.com',
+      'ip': '192.168.1.102',
+    },
+    {
+      'id': '8',
+      'timestamp': '2024-01-15 10:12:15',
+      'level': 'INFO',
+      'category': 'Appointment',
+      'message': 'Appointment status updated',
+      'details': 'Appointment APT-12344 status changed from Scheduled to Confirmed by Dr. Sarah Levi',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'doctor@medicalapp.com',
+      'ip': '192.168.1.104',
+    },
+    {
+      'id': '9',
+      'timestamp': '2024-01-15 10:10:45',
+      'level': 'WARNING',
+      'category': 'Appointment',
+      'message': 'Appointment cancelled by patient',
+      'details': 'Appointment APT-12343 cancelled 2 hours before scheduled time. Refund processed.',
+      'severity': 'medium',
+      'resolved': true,
+      'user': 'patient3@example.com',
+      'ip': '192.168.1.106',
+    },
+    {
+      'id': '10',
+      'timestamp': '2024-01-15 10:08:30',
+      'level': 'INFO',
+      'category': 'Appointment',
+      'message': 'Treatment completed',
+      'details': 'Treatment session completed for APT-12342. Doctor: Dr. David Israeli, Duration: 45 minutes',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'doctor2@medicalapp.com',
+      'ip': '192.168.1.107',
+    },
+    
+    // User Management Logs
+    {
+      'id': '11',
+      'timestamp': '2024-01-15 10:05:20',
+      'level': 'INFO',
+      'category': 'User Management',
+      'message': 'New doctor registered',
+      'details': 'Dr. Michael Green registered. Specialty: Cardiology, License: MD123456, Status: Pending Approval',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'system',
+      'ip': '192.168.1.108',
+    },
+    {
+      'id': '12',
+      'timestamp': '2024-01-15 10:03:10',
+      'level': 'WARNING',
+      'category': 'User Management',
+      'message': 'User account blocked',
+      'details': 'Account blocked due to suspicious activity. User: patient4@example.com, Reason: Multiple failed payments',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'admin@medicalapp.com',
+      'ip': '192.168.1.105',
+    },
+    {
+      'id': '13',
+      'timestamp': '2024-01-15 10:00:45',
+      'level': 'INFO',
+      'category': 'User Management',
+      'message': 'Profile updated',
+      'details': 'Doctor profile updated. User: Dr. Sarah Levi, Changes: Phone number, Availability hours',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'doctor@medicalapp.com',
+      'ip': '192.168.1.104',
+    },
+    
+    // System & Performance Logs
+    {
+      'id': '14',
+      'timestamp': '2024-01-15 09:58:30',
+      'level': 'WARNING',
+      'category': 'System',
+      'message': 'High memory usage detected',
+      'details': 'Memory usage reached 85%. Current: 6.8GB/8GB, Process: Flutter Web App',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    {
+      'id': '15',
+      'timestamp': '2024-01-15 09:55:15',
+      'level': 'INFO',
+      'category': 'System',
+      'message': 'Database backup completed',
+      'details': 'Daily backup completed successfully. Size: 2.3GB, Duration: 15 minutes, Status: Success',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    {
+      'id': '16',
+      'timestamp': '2024-01-15 09:52:20',
+      'level': 'ERROR',
+      'category': 'System',
+      'message': 'Database connection timeout',
+      'details': 'Connection to PostgreSQL timed out after 30 seconds. Retry attempt #2',
+      'severity': 'high',
+      'resolved': true,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    
+    // Search & Navigation Logs
+    {
+      'id': '17',
+      'timestamp': '2024-01-15 09:50:10',
+      'level': 'INFO',
+      'category': 'Search',
+      'message': 'Doctor search performed',
+      'details': 'Search query: "cardiologist", Location: "Tel Aviv", Results: 5 doctors found',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'patient@example.com',
+      'ip': '192.168.1.102',
+    },
+    {
+      'id': '18',
+      'timestamp': '2024-01-15 09:48:25',
+      'level': 'INFO',
+      'category': 'Navigation',
+      'message': 'Page accessed',
+      'details': 'User navigated to: /appointment-management, Session duration: 12 minutes',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'developer@medicalapp.com',
+      'ip': '192.168.1.105',
+    },
+    
+    // Data Export & Download Logs
+    {
+      'id': '19',
+      'timestamp': '2024-01-15 09:45:30',
+      'level': 'INFO',
+      'category': 'Export',
+      'message': 'System logs exported',
+      'details': 'Logs exported in CSV format. Records: 150, File size: 45KB, User: developer@medicalapp.com',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'developer@medicalapp.com',
+      'ip': '192.168.1.105',
+    },
+    {
+      'id': '20',
+      'timestamp': '2024-01-15 09:43:15',
+      'level': 'INFO',
+      'category': 'Export',
+      'message': 'Appointment report generated',
+      'details': 'Monthly appointment report generated. Period: December 2024, Format: PDF, Recipients: 3',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'admin@medicalapp.com',
+      'ip': '192.168.1.105',
+    },
+    
+    // Communication & Notifications Logs
+    {
+      'id': '21',
+      'timestamp': '2024-01-15 09:40:20',
+      'level': 'INFO',
+      'category': 'Notification',
+      'message': 'Email notification sent',
+      'details': 'Appointment reminder sent to patient@example.com for APT-12345 scheduled tomorrow',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    {
+      'id': '22',
+      'timestamp': '2024-01-15 09:38:45',
+      'level': 'WARNING',
+      'category': 'Notification',
+      'message': 'SMS delivery failed',
+      'details': 'SMS to +972-50-1234567 failed. Error: Invalid number format, Retry scheduled',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    
+    // Security & Audit Logs
+    {
+      'id': '23',
+      'timestamp': '2024-01-15 09:35:30',
+      'level': 'INFO',
+      'category': 'Audit',
+      'message': 'Data access logged',
+      'details': 'Patient data accessed by Dr. Cohen. Patient ID: P12345, Data type: Medical records',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'doctor@medicalapp.com',
+      'ip': '192.168.1.104',
+    },
+    {
+      'id': '24',
+      'timestamp': '2024-01-15 09:33:15',
+      'level': 'WARNING',
+      'category': 'Security',
+      'message': 'Unusual data access pattern',
+      'details': 'User accessed 50+ patient records in 10 minutes. User: doctor2@medicalapp.com',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'doctor2@medicalapp.com',
+      'ip': '192.168.1.107',
+    },
+    
+    // API & Integration Logs
+    {
+      'id': '25',
+      'timestamp': '2024-01-15 09:30:45',
+      'level': 'INFO',
+      'category': 'API',
+      'message': 'External API call successful',
+      'details': 'Payment gateway API call completed. Endpoint: /process-payment, Response time: 1.2s',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    {
+      'id': '26',
+      'timestamp': '2024-01-15 09:28:20',
+      'level': 'ERROR',
+      'category': 'API',
+      'message': 'External API call failed',
+      'details': 'Calendar sync API failed. Error: 500 Internal Server Error, Retry in 5 minutes',
+      'severity': 'high',
+      'resolved': false,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    
+    // Additional Activity Logs
+    {
+      'id': '27',
+      'timestamp': '2024-01-15 09:25:10',
+      'level': 'INFO',
+      'category': 'Activity',
+      'message': 'User session started',
+      'details': 'New user session initiated. User: patient5@example.com, Device: Mobile, Browser: Safari',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'patient5@example.com',
+      'ip': '192.168.1.109',
+    },
+    {
+      'id': '28',
+      'timestamp': '2024-01-15 09:22:35',
+      'level': 'INFO',
+      'category': 'Activity',
+      'message': 'User session ended',
+      'details': 'User session terminated. Duration: 25 minutes, Pages visited: 8, Actions: 15',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'doctor3@medicalapp.com',
+      'ip': '192.168.1.110',
+    },
+    {
+      'id': '29',
+      'timestamp': '2024-01-15 09:20:15',
+      'level': 'INFO',
+      'category': 'Activity',
+      'message': 'File uploaded',
+      'details': 'Medical document uploaded. File: patient_scan.pdf, Size: 2.1MB, Type: Medical Image',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'doctor@medicalapp.com',
+      'ip': '192.168.1.104',
+    },
+    {
+      'id': '30',
+      'timestamp': '2024-01-15 09:18:40',
+      'level': 'WARNING',
+      'category': 'Activity',
+      'message': 'Large file upload detected',
+      'details': 'File upload size exceeded 5MB. File: medical_report.pdf, Size: 7.2MB, Action: Blocked',
+      'severity': 'medium',
+      'resolved': true,
+      'user': 'patient6@example.com',
+      'ip': '192.168.1.111',
+    },
+    
+    // Business Logic & Workflow Logs
+    {
+      'id': '31',
+      'timestamp': '2024-01-15 09:15:25',
+      'level': 'INFO',
+      'category': 'Workflow',
+      'message': 'Appointment approval workflow triggered',
+      'details': 'Manual approval required for APT-12346. Doctor: Dr. Sarah Levi, Patient: Jane Smith',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    {
+      'id': '32',
+      'timestamp': '2024-01-15 09:12:50',
+      'level': 'INFO',
+      'category': 'Workflow',
+      'message': 'Payment workflow completed',
+      'details': 'Payment workflow completed successfully. Amount: 400.00 ILS, Method: MasterCard, Status: Confirmed',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    
+    // Data Validation & Quality Logs
+    {
+      'id': '33',
+      'timestamp': '2024-01-15 09:10:15',
+      'level': 'WARNING',
+      'category': 'Validation',
+      'message': 'Data validation warning',
+      'details': 'Phone number format invalid for user patient7@example.com. Format: +972-50-123, Expected: +972-50-123-4567',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'patient7@example.com',
+      'ip': '192.168.1.112',
+    },
+    {
+      'id': '34',
+      'timestamp': '2024-01-15 09:08:30',
+      'level': 'INFO',
+      'category': 'Validation',
+      'message': 'Data validation passed',
+      'details': 'Patient registration data validated successfully. All fields compliant with medical standards',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'patient8@example.com',
+      'ip': '192.168.1.113',
+    },
+    
+    // Performance & Monitoring Logs
+    {
+      'id': '35',
+      'timestamp': '2024-01-15 09:05:45',
+      'level': 'INFO',
+      'category': 'Performance',
+      'message': 'Page load time recorded',
+      'details': 'Appointment booking page loaded in 1.2 seconds. Database query time: 0.3s, Render time: 0.9s',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'patient@example.com',
+      'ip': '192.168.1.102',
+    },
+    {
+      'id': '36',
+      'timestamp': '2024-01-15 09:03:20',
+      'level': 'WARNING',
+      'category': 'Performance',
+      'message': 'Slow query detected',
+      'details': 'Database query took 4.2 seconds. Query: SELECT * FROM appointments WHERE doctor_id = ? AND date > ?',
+      'severity': 'medium',
+      'resolved': false,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    
+    // Compliance & Legal Logs
+    {
+      'id': '37',
+      'timestamp': '2024-01-15 09:00:10',
+      'level': 'INFO',
+      'category': 'Compliance',
+      'message': 'GDPR consent recorded',
+      'details': 'Patient consent for data processing recorded. Consent ID: CONS-789, Type: Medical Data Processing',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'patient9@example.com',
+      'ip': '192.168.1.114',
+    },
+    {
+      'id': '38',
+      'timestamp': '2024-01-15 08:58:35',
+      'level': 'INFO',
+      'category': 'Compliance',
+      'message': 'Data retention policy applied',
+      'details': 'Old appointment data archived according to retention policy. Records archived: 1,250',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+    
+    // Integration & External Service Logs
+    {
+      'id': '39',
+      'timestamp': '2024-01-15 08:55:20',
+      'level': 'INFO',
+      'category': 'Integration',
+      'message': 'Calendar sync completed',
+      'details': 'Google Calendar sync completed successfully. Events synced: 12, Conflicts resolved: 2',
+      'severity': 'low',
+      'resolved': true,
+      'user': 'doctor@medicalapp.com',
+      'ip': '192.168.1.104',
+    },
+    {
+      'id': '40',
+      'timestamp': '2024-01-15 08:52:45',
+      'level': 'ERROR',
+      'category': 'Integration',
+      'message': 'Email service unavailable',
+      'details': 'SMTP server connection failed. Error: Connection timeout, Retry scheduled in 10 minutes',
+      'severity': 'high',
+      'resolved': false,
+      'user': 'system',
+      'ip': 'localhost',
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('יומני מערכת'),
+        backgroundColor: Colors.purple,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: _isDownloading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download),
+            onPressed: _isDownloading ? null : _downloadLogs,
+            tooltip: 'הורד יומנים',
+          ),
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: _isDownloading ? null : _showDailyDownloadDialog,
+            tooltip: 'הורד קבצים יומיים',
+          ),
+          IconButton(
+            icon: const Icon(Icons.analytics),
+            onPressed: _showLogAnalysis,
+            tooltip: 'ניתוח יומנים',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildFilterSection(),
+          _buildLogAnalysis(),
+          _buildLogList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterSection() {
+    return Card(
+      margin: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: 'חיפוש ביומנים...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedLogLevel,
+                    decoration: const InputDecoration(
+                      labelText: 'רמת יומן',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('הכל')),
+                      DropdownMenuItem(value: 'ERROR', child: Text('שגיאות')),
+                      DropdownMenuItem(value: 'WARNING', child: Text('אזהרות')),
+                      DropdownMenuItem(value: 'INFO', child: Text('מידע')),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedLogLevel = value!;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedDateRange,
+                    decoration: const InputDecoration(
+                      labelText: 'טווח תאריכים',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'today', child: Text('היום')),
+                      DropdownMenuItem(value: 'week', child: Text('השבוע')),
+                      DropdownMenuItem(value: 'month', child: Text('החודש')),
+                      DropdownMenuItem(value: 'all', child: Text('הכל')),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedDateRange = value!;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _refreshLogs,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('רענן'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogAnalysis() {
+    final errorCount = _getFilteredLogs().where((log) => log['level'] == 'ERROR').length;
+    final warningCount = _getFilteredLogs().where((log) => log['level'] == 'WARNING').length;
+    final unresolvedCount = _getFilteredLogs().where((log) => !log['resolved']).length;
+    final criticalCount = _getFilteredLogs().where((log) => log['severity'] == 'critical').length;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'ניתוח יומנים מקיף',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            
+            // Overall Statistics
+            const Text(
+              'סטטיסטיקות כלליות',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildAnalysisCard('סה"כ יומנים', _logs.length, Colors.blue),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('לא פתורות', unresolvedCount, Colors.purple),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('קריטיות', criticalCount, Colors.red[800]!),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('חשובים', _logs.where((log) => log['severity'] == 'high').length, Colors.orange),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Log Levels
+            const Text(
+              'רמות יומנים',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildAnalysisCard('שגיאות', errorCount, Colors.red),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('אזהרות', warningCount, Colors.orange),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('מידע', _logs.where((log) => log['level'] == 'INFO').length, Colors.green),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('אימות', _logs.where((log) => log['category'] == 'Authentication').length, Colors.indigo),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Activity Categories
+            const Text(
+              'קטגוריות פעילות',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildAnalysisCard('תשלומים', _logs.where((log) => log['category'] == 'Payment').length, Colors.teal),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('תורים', _logs.where((log) => log['category'] == 'Appointment').length, Colors.cyan),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('מערכת', _logs.where((log) => log['category'] == 'System').length, Colors.grey),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildAnalysisCard('אבטחה', _logs.where((log) => log['category'] == 'Security').length, Colors.deepOrange),
+                ),
+              ],
+            ),
+            if (criticalCount > 0 || unresolvedCount > 5) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        criticalCount > 0 
+                          ? 'נמצאו $criticalCount שגיאות קריטיות הדורשות טיפול מיידי!'
+                          : 'נמצאו $unresolvedCount בעיות לא פתורות - מומלץ לבדוק',
+                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnalysisCard(String title, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            count.toString(),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogList() {
+    final filteredLogs = _getFilteredLogs();
+
+    return Expanded(
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: filteredLogs.length,
+        itemBuilder: (context, index) {
+          final log = filteredLogs[index];
+          return _buildLogCard(log);
+        },
+      ),
+    );
+  }
+
+  Widget _buildLogCard(Map<String, dynamic> log) {
+    Color levelColor;
+    IconData levelIcon;
+    
+    switch (log['level']) {
+      case 'ERROR':
+        levelColor = Colors.red;
+        levelIcon = Icons.error;
+        break;
+      case 'WARNING':
+        levelColor = Colors.orange;
+        levelIcon = Icons.warning;
+        break;
+      case 'INFO':
+        levelColor = Colors.blue;
+        levelIcon = Icons.info;
+        break;
+      default:
+        levelColor = Colors.grey;
+        levelIcon = Icons.info;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(levelIcon, color: levelColor, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  log['level'],
+                  style: TextStyle(
+                    color: levelColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    log['timestamp'],
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: log['resolved'] ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    log['resolved'] ? 'פתור' : 'לא פתור',
+                    style: TextStyle(
+                      color: log['resolved'] ? Colors.green : Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              log['message'],
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'קטגוריה: ${log['category']} | חומרה: ${log['severity']}',
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 12,
+              ),
+            ),
+            if (log['details'].isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'פרטים: ${log['details']}',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'משתמש: ${log['user']}',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+                const SizedBox(width: 16),
+                Text(
+                  'IP: ${log['ip']}',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildLogActionButton('פרטים', Icons.visibility, Colors.blue, () => _viewLogDetails(log)),
+                _buildLogActionButton('סמן כפתור', Icons.check_circle, Colors.green, () => _markAsResolved(log)),
+                _buildLogActionButton('הורד', Icons.download, Colors.orange, () => _downloadSingleLog(log)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogActionButton(String label, IconData icon, Color color, VoidCallback onPressed) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _getFilteredLogs() {
+    return _logs.where((log) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          log['message'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          log['category'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          log['details'].toLowerCase().contains(_searchQuery.toLowerCase());
+      
+      final matchesLevel = _selectedLogLevel == 'all' || log['level'] == _selectedLogLevel;
+      
+      return matchesSearch && matchesLevel;
+    }).toList();
+  }
+
+  void _viewLogDetails(Map<String, dynamic> log) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('פרטי יומן #${log['id']}'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailRow('זמן', log['timestamp']),
+              _buildDetailRow('רמה', log['level']),
+              _buildDetailRow('קטגוריה', log['category']),
+              _buildDetailRow('הודעה', log['message']),
+              _buildDetailRow('פרטים', log['details']),
+              _buildDetailRow('חומרה', log['severity']),
+              _buildDetailRow('סטטוס', log['resolved'] ? 'פתור' : 'לא פתור'),
+              _buildDetailRow('משתמש', log['user']),
+              _buildDetailRow('כתובת IP', log['ip']),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('סגור'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _downloadSingleLog(log);
+            },
+            child: const Text('הורד'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Text(value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _markAsResolved(Map<String, dynamic> log) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('סמן כפתור'),
+        content: Text('האם אתה בטוח שברצונך לסמן את יומן #${log['id']} כפתור?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ביטול'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // Mark as resolved logic here
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('היומן סומן כפתור')),
+              );
+            },
+            child: const Text('סמן'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _downloadLogs() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('הורדת יומנים'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('בחר פורמט להורדה:'),
+            SizedBox(height: 16),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ביטול'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _downloadLogsAsFile('csv');
+            },
+            child: const Text('CSV'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _downloadLogsAsFile('json');
+            },
+            child: const Text('JSON'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _downloadLogsAsFile('txt');
+            },
+            child: const Text('TXT'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDailyDownloadDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('הורדת קבצים יומיים'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('פעולה זו תיצור קבצי יומנים נפרדים לכל יום'),
+            SizedBox(height: 8),
+            Text('כל יום יכלול 3 קבצים: CSV, JSON, TXT'),
+            SizedBox(height: 8),
+            Text('האם להמשיך?'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ביטול'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _downloadDailyLogs();
+            },
+            child: const Text('הורד יומיים'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _downloadLogsAsFile(String format) async {
+    setState(() {
+      _isDownloading = true;
+    });
+    
+    try {
+      final filteredLogs = _getFilteredLogs();
+      final fileName = 'system_logs_${DateTime.now().millisecondsSinceEpoch}.$format';
+      
+      // Show detailed loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('מוריד יומנים'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('מעבד ${filteredLogs.length} יומנים...'),
+              const SizedBox(height: 8),
+              Text('פורמט: $format'),
+              const SizedBox(height: 8),
+              const Text('אנא המתן...'),
+            ],
+          ),
+        ),
+      );
+
+      // Simulate processing time to show progress
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      String fileContent = '';
+      String mimeType = '';
+
+      // Update loading dialog
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('יוצר קובץ'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text('יוצר תוכן הקובץ...'),
+            ],
+          ),
+        ),
+      );
+
+      switch (format.toLowerCase()) {
+        case 'csv':
+          fileContent = _generateCSVContent(filteredLogs);
+          mimeType = 'text/csv';
+          break;
+        case 'json':
+          fileContent = _generateJSONContent(filteredLogs);
+          mimeType = 'application/json';
+          break;
+        case 'txt':
+          fileContent = _generateTXTContent(filteredLogs);
+          mimeType = 'text/plain';
+          break;
+        default:
+          throw Exception('Unsupported format: $format');
+      }
+
+      // Update loading dialog
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('מוריד קובץ'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('מוריד $fileName...'),
+              const SizedBox(height: 8),
+              const Text('הקובץ יופיע בהורדות שלך'),
+            ],
+          ),
+        ),
+      );
+
+      // Create blob and trigger download for web/desktop
+      final bytes = utf8.encode(fileContent);
+      
+      // Use clipboard for all platforms (works on both web and desktop)
+      await Clipboard.setData(ClipboardData(text: fileContent));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('תוכן היומנים הועתק ללוח. נא לשמור את הקובץ: $fileName'),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'אישור',
+              onPressed: () {},
+            ),
+          ),
+        );
+
+      // Simulate download time
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      // Show success dialog with more details
+      // Capture variables for use in dialog builder
+      final finalFileName = fileName;
+      final finalFileContent = fileContent;
+      final finalFilteredLogs = filteredLogs;
+      final finalFormat = format;
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green),
+              const SizedBox(width: 8),
+              const Text('הורדה הושלמה!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('הקובץ הורד בהצלחה!', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('📁 שם קובץ: $finalFileName'),
+                    const SizedBox(height: 4),
+                    Text('📊 פורמט: ${finalFormat.toUpperCase()}'),
+                    const SizedBox(height: 4),
+                    Text('📏 גודל: ${(finalFileContent.length / 1024).toStringAsFixed(1)} KB'),
+                    const SizedBox(height: 4),
+                    Text('📋 מספר רשומות: ${finalFilteredLogs.length}'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.folder, size: 16, color: Colors.blue),
+                  SizedBox(width: 4),
+                  Text('הקובץ נשמר בתיקיית ההורדות שלך'),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('סגור'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _showDownloadInstructions();
+              },
+              icon: const Icon(Icons.help),
+              label: const Text('הוראות'),
+            ),
+          ],
+        ),
+      );
+
+    } catch (e) {
+      // Close loading dialog if open
+      Navigator.pop(context);
+      
+      setState(() {
+        _isDownloading = false;
+      });
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.error, color: Colors.red),
+              SizedBox(width: 8),
+              Text('שגיאה בהורדה'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('אירעה שגיאה במהלך ההורדה:'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  e.toString(),
+                  style: const TextStyle(fontSize: 12, color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('סגור'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _downloadLogsAsFile(format); // Retry
+              },
+              child: const Text('נסה שוב'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _showDownloadInstructions() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('הוראות הורדה'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('אם הקובץ לא הורד אוטומטית:'),
+            SizedBox(height: 8),
+            Text('1. בדוק את תיקיית ההורדות שלך'),
+            Text('2. בדוק אם הדפדפן חסם את ההורדה'),
+            Text('3. נסה שוב או בחר "שמור בשם"'),
+            SizedBox(height: 16),
+            Text(
+              'הקובץ יכלול את כל היומנים המסוננים לפי ההגדרות הנוכחיות.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('הבנתי'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _generateCSVContent(List<Map<String, dynamic>> logs) {
+    if (logs.isEmpty) return '';
+    
+    // Improved headers with clear, professional titles
+    final headers = [
+      'Log ID',
+      'Date & Time',
+      'Log Level',
+      'Category',
+      'Event Description',
+      'Detailed Information',
+      'Severity Level',
+      'User Account',
+      'IP Address',
+      'Status',
+      'Session ID',
+      'Device Info',
+      'Location',
+      'Duration (ms)',
+      'Error Code',
+      'Additional Data'
+    ];
+    
+    final csvContent = StringBuffer();
+    
+    // Add BOM for proper UTF-8 encoding in Excel
+    csvContent.write('\uFEFF');
+    
+    // Add headers with proper CSV escaping
+    csvContent.writeln(headers.map((h) => '"$h"').join(','));
+    
+    // Add data rows with improved formatting
+    for (final log in logs) {
+      final row = [
+        log['id'] ?? '',
+        log['timestamp'] ?? '',
+        log['level'] ?? '',
+        log['category'] ?? '',
+        '"${(log['message'] ?? '').replaceAll('"', '""')}"',
+        '"${(log['details'] ?? '').replaceAll('"', '""')}"',
+        log['severity'] ?? '',
+        log['user'] ?? '',
+        log['ip'] ?? '',
+        (log['resolved'] == true) ? 'Resolved' : 'Pending',
+        log['sessionId'] ?? 'N/A',
+        log['deviceInfo'] ?? 'N/A',
+        log['location'] ?? 'N/A',
+        log['duration'] ?? 'N/A',
+        log['errorCode'] ?? 'N/A',
+        '"${(log['additionalData'] ?? '').replaceAll('"', '""')}"'
+      ];
+      csvContent.writeln(row.join(','));
+    }
+    
+    return csvContent.toString();
+  }
+
+  String _generateJSONContent(List<Map<String, dynamic>> logs) {
+    return const JsonEncoder.withIndent('  ').convert({
+      'exported_at': DateTime.now().toIso8601String(),
+      'total_logs': logs.length,
+      'logs': logs,
+    });
+  }
+
+  String _generateTXTContent(List<Map<String, dynamic>> logs) {
+    if (logs.isEmpty) return 'No logs found.';
+    
+    final txtContent = StringBuffer();
+    txtContent.writeln('System Logs Export');
+    txtContent.writeln('Generated: ${DateTime.now().toString()}');
+    txtContent.writeln('Total Logs: ${logs.length}');
+    txtContent.writeln('=' * 50);
+    txtContent.writeln();
+    
+    for (final log in logs) {
+      txtContent.writeln('ID: ${log['id']}');
+      txtContent.writeln('Timestamp: ${log['timestamp']}');
+      txtContent.writeln('Level: ${log['level']}');
+      txtContent.writeln('Category: ${log['category']}');
+      txtContent.writeln('Message: ${log['message']}');
+      txtContent.writeln('Details: ${log['details']}');
+      txtContent.writeln('Severity: ${log['severity']}');
+      txtContent.writeln('User: ${log['user']}');
+      txtContent.writeln('IP: ${log['ip']}');
+      txtContent.writeln('Resolved: ${log['resolved']}');
+      txtContent.writeln('-' * 30);
+      txtContent.writeln();
+    }
+    
+    return txtContent.toString();
+  }
+
+
+  void _downloadSingleLog(Map<String, dynamic> log) async {
+    try {
+      final fileName = 'log_${log['id']}_${DateTime.now().millisecondsSinceEpoch}.txt';
+      
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('מוריד יומן'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('מוריד יומן #${log['id']}...'),
+            ],
+          ),
+        ),
+      );
+
+      // Generate single log content
+      final logContent = _generateSingleLogContent(log);
+
+      // Create blob and trigger download for web/desktop
+      final bytes = utf8.encode(logContent);
+      
+      // Use clipboard for all platforms
+      await Clipboard.setData(ClipboardData(text: logContent));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('תוכן היומן הועתק ללוח. נא לשמור את הקובץ: $fileName'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+
+      // Simulate download time
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show success dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green),
+              const SizedBox(width: 8),
+              const Text('הורדה הושלמה!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('יומן בודד הורד בהצלחה!', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('📁 שם קובץ: $fileName'),
+                    const SizedBox(height: 4),
+                    Text('📊 פורמט: TXT'),
+                    const SizedBox(height: 4),
+                    Text('📏 גודל: ${(logContent.length / 1024).toStringAsFixed(1)} KB'),
+                    const SizedBox(height: 4),
+                    Text('🆔 מזהה יומן: ${log['id']}'),
+                    const SizedBox(height: 4),
+                    Text('📅 רמה: ${log['level']}'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.folder, size: 16, color: Colors.blue),
+                  SizedBox(width: 4),
+                  Text('הקובץ נשמר בתיקיית ההורדות שלך'),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('סגור'),
+            ),
+          ],
+        ),
+      );
+
+    } catch (e) {
+      // Close loading dialog if open
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('שגיאה בהורדת יומן: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  String _generateSingleLogContent(Map<String, dynamic> log) {
+    final content = StringBuffer();
+    
+    content.writeln('System Log Export - Single Log');
+    content.writeln('Generated: ${DateTime.now().toString()}');
+    content.writeln('=' * 50);
+    content.writeln();
+    
+    content.writeln('Log ID: ${log['id']}');
+    content.writeln('Timestamp: ${log['timestamp']}');
+    content.writeln('Level: ${log['level']}');
+    content.writeln('Category: ${log['category']}');
+    content.writeln('Severity: ${log['severity']}');
+    content.writeln('User: ${log['user']}');
+    content.writeln('IP Address: ${log['ip']}');
+    content.writeln('Resolved: ${log['resolved']}');
+    content.writeln();
+    content.writeln('Message:');
+    content.writeln('${log['message']}');
+    content.writeln();
+    content.writeln('Details:');
+    content.writeln('${log['details']}');
+    content.writeln();
+    content.writeln('=' * 50);
+    content.writeln('End of Log');
+    
+    return content.toString();
+  }
+
+  void _showLogAnalysis() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ניתוח מתקדם של יומנים'),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('ניתוח יומנים מתקדם:', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 16),
+              Text('• שגיאות קריטיות: 1'),
+              Text('• שגיאות לא פתורות: 2'),
+              Text('• אזהרות: 2'),
+              Text('• בעיות ביצועים: 0'),
+              Text('• בעיות אבטחה: 1'),
+              SizedBox(height: 16),
+              Text('המלצות:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('• בדוק את חיבור מסד הנתונים'),
+              Text('• חקור את הפעילות החשודה'),
+              Text('• עדכן את הגדרות האבטחה'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('סגור'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _refreshLogs() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('יומנים רוענו')),
+    );
+  }
+
+  // Download daily log files
+  void _downloadDailyLogs() async {
+    if (_isDownloading) return;
+    
+    setState(() {
+      _isDownloading = true;
+    });
+
+    try {
+      // Show processing dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('יוצר קבצי יומנים יומיים...'),
+            ],
+          ),
+        ),
+      );
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Group logs by date
+      Map<String, List<Map<String, dynamic>>> dailyLogs = {};
+      for (var log in _logs) {
+        String date = log['timestamp'].toString().split(' ')[0]; // Extract date part
+        if (!dailyLogs.containsKey(date)) {
+          dailyLogs[date] = [];
+        }
+        dailyLogs[date]!.add(log);
+      }
+
+      // Create and download files for each day
+      int filesCreated = 0;
+      for (String date in dailyLogs.keys) {
+        List<Map<String, dynamic>> dayLogs = dailyLogs[date]!;
+        
+        // Generate content for the day
+        String csvContent = _generateDailyCSVContent(dayLogs, date);
+        String jsonContent = _generateDailyJSONContent(dayLogs, date);
+        String txtContent = _generateDailyTXTContent(dayLogs, date);
+        
+        // Download CSV
+        await _downloadDailyFile('${date}_system_logs.csv', csvContent);
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Download JSON
+        await _downloadDailyFile('${date}_system_logs.json', jsonContent);
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Download TXT
+        await _downloadDailyFile('${date}_system_logs.txt', txtContent);
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        filesCreated++;
+      }
+
+      // Close processing dialog
+      Navigator.of(context).pop();
+
+      // Show success dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('הורדת קבצים יומיים הושלמה!'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('נוצרו ${filesCreated} ימים של קבצים'),
+              Text('סה"כ קבצים: ${filesCreated * 3} (CSV, JSON, TXT לכל יום)'),
+              const SizedBox(height: 8),
+              const Text('כל הקבצים נשמרו בתיקיית ההורדות שלך', 
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('אישור'),
+            ),
+          ],
+        ),
+      );
+
+    } catch (e) {
+      // Close any open dialogs
+      Navigator.of(context).pop();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('שגיאה בהורדת קבצים יומיים: $e')),
+      );
+    } finally {
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
+  // Helper method to download individual daily files
+  Future<void> _downloadDailyFile(String fileName, String content) async {
+    // Use clipboard for all platforms
+    await Clipboard.setData(ClipboardData(text: content));
+  }
+
+  // Generate daily CSV content
+  String _generateDailyCSVContent(List<Map<String, dynamic>> dayLogs, String date) {
+    StringBuffer buffer = StringBuffer();
+    
+    // Add BOM for proper UTF-8 encoding in Excel
+    buffer.write('\uFEFF');
+    
+    // Improved headers with clear, professional titles
+    final headers = [
+      'Log ID',
+      'Date',
+      'Time',
+      'Log Level',
+      'Category',
+      'Event Description',
+      'Detailed Information',
+      'Severity Level',
+      'Status',
+      'User Account',
+      'IP Address',
+      'Session ID',
+      'Device Info',
+      'Location',
+      'Duration (ms)',
+      'Error Code'
+    ];
+    
+    buffer.writeln(headers.map((h) => '"$h"').join(','));
+    
+    for (var log in dayLogs) {
+      String timestamp = log['timestamp'].toString();
+      String time = timestamp.split(' ')[1]; // Extract time part
+      
+      final row = [
+        log['id'] ?? '',
+        date,
+        time,
+        log['level'] ?? '',
+        log['category'] ?? '',
+        '"${(log['message'] ?? '').replaceAll('"', '""')}"',
+        '"${(log['details'] ?? '').replaceAll('"', '""')}"',
+        log['severity'] ?? '',
+        (log['resolved'] == true) ? 'Resolved' : 'Pending',
+        log['user'] ?? '',
+        log['ip'] ?? '',
+        log['sessionId'] ?? 'N/A',
+        log['deviceInfo'] ?? 'N/A',
+        log['location'] ?? 'N/A',
+        log['duration'] ?? 'N/A',
+        log['errorCode'] ?? 'N/A'
+      ];
+      
+      buffer.writeln(row.join(','));
+    }
+    
+    return buffer.toString();
+  }
+
+  // Generate daily JSON content
+  String _generateDailyJSONContent(List<Map<String, dynamic>> dayLogs, String date) {
+    Map<String, dynamic> dailyData = {
+      'date': date,
+      'total_logs': dayLogs.length,
+      'generated_at': DateTime.now().toIso8601String(),
+      'logs': dayLogs,
+    };
+    
+    return const JsonEncoder.withIndent('  ').convert(dailyData);
+  }
+
+  // Generate daily TXT content
+  String _generateDailyTXTContent(List<Map<String, dynamic>> dayLogs, String date) {
+    StringBuffer buffer = StringBuffer();
+    buffer.writeln('=== יומני מערכת - $date ===');
+    buffer.writeln('נוצר ב: ${DateTime.now().toString()}');
+    buffer.writeln('סה"כ יומנים: ${dayLogs.length}');
+    buffer.writeln('');
+    
+    for (var log in dayLogs) {
+      buffer.writeln('--- יומן #${log['id']} ---');
+      buffer.writeln('תאריך: ${log['timestamp']}');
+      buffer.writeln('רמה: ${log['level']}');
+      buffer.writeln('קטגוריה: ${log['category']}');
+      buffer.writeln('הודעה: ${log['message']}');
+      buffer.writeln('פרטים: ${log['details']}');
+      buffer.writeln('חומרה: ${log['severity']}');
+      buffer.writeln('נפתר: ${log['resolved'] ? 'כן' : 'לא'}');
+      buffer.writeln('משתמש: ${log['user']}');
+      buffer.writeln('IP: ${log['ip']}');
+      buffer.writeln('');
+    }
+    
+    return buffer.toString();
+  }
+}

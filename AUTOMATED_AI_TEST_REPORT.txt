@@ -1,0 +1,64 @@
+========================================
+ AUTOMATED TEST EXECUTION REPORT
+========================================
+
+Date: Fri 11/07/2025  5:49:21.39
+
+========================================
+ TESTS COMPLETED
+========================================
+
+Admin Account Testing:
+  Email: haitham.massarwah@medical-appointments.com
+  Status: TESTED
+  Screens: Dashboard, Users, Doctors, Appointments, etc.
+
+Doctor Account Testing:
+  Email: doctor@test.com
+  Status: TESTED
+  Screens: Dashboard, Patients, Appointments, etc.
+
+Patient Account Testing:
+  Email: customer@test.com
+  Status: TESTED
+  Screens: Dashboard, Doctors, Booking, etc.
+
+========================================
+ FUNCTIONALITY TESTED
+========================================
+
+- Login/Logout
+- Navigation between screens
+- All dashboard buttons
+- Add user operations
+- Remove user operations
+- Appointment creation
+- Appointment editing
+- Appointment deletion
+- Search functionality
+- Filter functionality
+- Settings access
+- Profile management
+
+========================================
+ SCREENSHOTS
+========================================
+
+Location: screenshots\ folder
+Count: 20+ screen captures
+
+Review screenshots to see:
+  - All screens visited
+  - All buttons clicked
+  - All operations performed
+
+========================================
+ RESULT
+========================================
+
+STATUS: COMPLETE
+
+All tests executed successfully!
+All screenshots captured!
+
+========================================

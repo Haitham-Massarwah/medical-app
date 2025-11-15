@@ -1,0 +1,53 @@
+========================================
+  INSTALLATION CHECKLIST
+  Medical Appointment System
+========================================
+
+BEFORE INSTALLATION:
+[ ] Computer running Windows 10 or 11
+[ ] Administrator access available
+[ ] At least 2 GB free disk space
+[ ] Internet connection available
+[ ] Antivirus temporarily disabled (if needed)
+
+DURING INSTALLATION:
+[ ] Ran INSTALL_CLINIC.bat as Administrator
+[ ] Installation completed without errors
+[ ] No error messages displayed
+
+POST-INSTALLATION VERIFICATION:
+[ ] PostgreSQL is installed
+[ ] Node.js is installed
+[ ] Backend directory exists
+[ ] Application directory exists
+[ ] Desktop shortcut created
+[ ] Start Menu entry created
+
+FUNCTIONALITY CHECK:
+[ ] Backend server starts (START_BACKEND.bat)
+[ ] Application launches (START_APP.bat)
+[ ] Can login with default credentials
+[ ] Can see doctor dashboard
+[ ] Can create appointment
+[ ] Database connection works
+
+CONFIGURATION:
+[ ] Changed default passwords
+[ ] Configured email settings (if needed)
+[ ] Set up clinic information
+[ ] Created user accounts for staff
+
+FINAL VERIFICATION:
+[ ] Run: CHECK_INSTALLATION.bat
+[ ] All checks pass
+[ ] System ready for use
+
+========================================
+Installation Date: ___________
+Installed By: ___________
+Clinic Name: ___________
+========================================
+
+
+
+
