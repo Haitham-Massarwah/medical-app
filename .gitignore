@@ -93,3 +93,8 @@ test/.test_coverage.dart
 *.freezed.dart
 *.mocks.dart
 
+# Sensitive credentials - DO NOT COMMIT
+*USER_ACCOUNTS*.txt
+*CREDENTIALS*.txt
+*PASSWORDS*.txt
+
