@@ -2,6 +2,9 @@
 # Manual only: avoids duplicating ci.yml on every push and avoids failing Docker login without secrets.
 name: CI/CD Pipeline (extended)
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
 
@@ -31,7 +34,7 @@ jobs:
         run: flutter test test --coverage
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
@@ -103,7 +106,7 @@ jobs:
           JWT_SECRET: test_secret
           JWT_REFRESH_SECRET: test_refresh_secret
 
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v6
         with:
           files: ./backend/coverage/lcov.info
           fail_ci_if_error: false

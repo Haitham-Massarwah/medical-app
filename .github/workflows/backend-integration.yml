@@ -1,6 +1,9 @@
 # Manual-only: integration tests need Postgres + migrations; run from Actions tab when ready.
 name: Backend integration tests
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
 
