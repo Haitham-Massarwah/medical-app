@@ -53,7 +53,7 @@ class _MedicalHomePageState extends State<MedicalHomePage> {
               ),
               const PopupMenuItem(
                 value: 'en',
-                child: Text('English'),
+                child: Text('אנגלית'),
               ),
             ],
           ),
@@ -388,7 +388,7 @@ class _MedicalHomePageState extends State<MedicalHomePage> {
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Filter options will be implemented here'),
+            Text('אפשרויות הסינון ייושמו כאן'),
           ],
         ),
         actions: [

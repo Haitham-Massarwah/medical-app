@@ -63,7 +63,7 @@ export async function verifyToken(req: Request, res: Response) {
 export async function acceptInvitation(req: Request, res: Response) {
   await ensureSchema();
   const { token } = req.params;
-  const { password, phone } = req.body || {};
+  const { phone } = req.body || {};
   try {
     const invite = await db('invitations').where({ token }).first();
     if (!invite) return res.status(404).json({ success: false, message: 'Invalid token' });

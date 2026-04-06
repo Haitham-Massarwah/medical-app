@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../widgets/dashboard_sidebar.dart';
+import '../../services/admin_service.dart';
 
 /// ADMIN PAYMENT CONTROL - Track payments from doctors to admin
 class AdminPaymentControl extends StatefulWidget {
@@ -10,36 +12,91 @@ class AdminPaymentControl extends StatefulWidget {
 }
 
 class _AdminPaymentControlState extends State<AdminPaymentControl> {
-  // Sample data - would come from backend
-  final List<Map<String, dynamic>> _doctorPayments = [
-    {
-      'doctorName': 'ד"ר אברהם כהן',
-      'totalEarnings': 15000,
-      'adminCommission': 3000, // 20% commission
-      'pendingPayment': 3000,
-      'lastPayment': '2024-01-01',
-      'status': 'pending',
-    },
-    {
-      'doctorName': 'ד"ר שרה לוי',
-      'totalEarnings': 22000,
-      'adminCommission': 4400,
-      'pendingPayment': 0,
-      'lastPayment': '2024-01-05',
-      'status': 'paid',
-    },
-    {
-      'doctorName': 'ד"ר דוד ישראלי',
-      'totalEarnings': 18500,
-      'adminCommission': 3700,
-      'pendingPayment': 3700,
-      'lastPayment': '2023-12-28',
-      'status': 'pending',
-    },
-  ];
+  final AdminService _adminService = AdminService();
+  List<Map<String, dynamic>> _doctorPayments = [];
+  bool _isLoading = true;
+  String _currentRole = 'developer';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDoctorPayments();
+    _setupRealTimeUpdates();
+  }
+
+  void _setupRealTimeUpdates() {
+    Future.delayed(const Duration(seconds: 30), () {
+      if (mounted) {
+        _loadDoctorPayments();
+        _setupRealTimeUpdates();
+      }
+    });
+  }
+
+  Future<void> _loadDoctorPayments() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Fetch real payment data from backend
+      final payments = await _adminService.getAppointments();
+      // Calculate doctor payments from appointments
+      final Map<String, Map<String, dynamic>> doctorPaymentsMap = {};
+      
+      for (var appointment in payments) {
+        final doctorId = appointment['doctor_id']?.toString() ?? '';
+        final doctorName = appointment['doctor_name']?.toString() ?? 'רופא לא ידוע';
+        final amount = (appointment['amount'] ?? 0).toDouble();
+        final status = appointment['status']?.toString() ?? 'pending';
+        
+        if (!doctorPaymentsMap.containsKey(doctorId)) {
+          doctorPaymentsMap[doctorId] = {
+            'doctorId': doctorId,
+            'doctorName': doctorName,
+            'totalEarnings': 0.0,
+            'adminCommission': 0.0,
+            'pendingPayment': 0.0,
+            'lastPayment': null,
+            'status': 'paid',
+          };
+        }
+        
+        final doctorPayment = doctorPaymentsMap[doctorId]!;
+        if (status == 'completed' && amount > 0) {
+          doctorPayment['totalEarnings'] = (doctorPayment['totalEarnings'] as double) + amount;
+          final commission = amount * 0.20; // 20% commission
+          doctorPayment['adminCommission'] = (doctorPayment['adminCommission'] as double) + commission;
+          doctorPayment['pendingPayment'] = (doctorPayment['pendingPayment'] as double) + commission;
+          doctorPayment['lastPayment'] = appointment['appointment_date']?.toString() ?? DateTime.now().toString();
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _doctorPayments = doctorPaymentsMap.values.toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context);
+    final isRTL = locale.languageCode == 'he' || locale.languageCode == 'ar';
+
+    final routeArgs = ModalRoute.of(context)?.settings.arguments;
+    if (routeArgs is Map<String, dynamic> && routeArgs['role'] is String) {
+      _currentRole = routeArgs['role'] as String;
+    }
+
     final totalPending = _doctorPayments
         .where((d) => d['status'] == 'pending')
         .fold(0.0, (sum, d) => sum + d['pendingPayment']);
@@ -48,35 +105,56 @@ class _AdminPaymentControlState extends State<AdminPaymentControl> {
         .where((d) => d['status'] == 'paid')
         .fold(0.0, (sum, d) => sum + d['adminCommission']);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('בקרת תשלומים מרופאים'),
-        backgroundColor: Colors.purple,
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: _exportReport,
-            tooltip: 'הורד דוח',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshData,
-            tooltip: 'רענן',
-          ),
-        ],
-      ),
+    return Directionality(
+      textDirection: isRTL ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Row(
+          children: [
+            // Sidebar
+            DashboardSidebar(currentRoute: '/admin-payment-control', role: _currentRole),
+            
+            // Main Content
+            Expanded(
+              child: Container(
+                color: AppColors.backgroundLight,
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(30),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'בקרת תשלומים מרופאים - Payment Control',
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.download),
+                                      onPressed: _exportReport,
+                                      tooltip: 'הורד דוח',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.refresh),
+                                      onPressed: _refreshData,
+                                      tooltip: 'רענן',
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 30),
               // Summary Cards
               Row(
                 children: [
@@ -111,9 +189,13 @@ class _AdminPaymentControlState extends State<AdminPaymentControl> {
               ),
               const SizedBox(height: 16),
               
-              ..._doctorPayments.map((doctor) => _buildDoctorPaymentCard(doctor)),
-            ],
-          ),
+                            ..._doctorPayments.map((doctor) => _buildDoctorPaymentCard(doctor)),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -122,6 +204,7 @@ class _AdminPaymentControlState extends State<AdminPaymentControl> {
         label: const Text('שלח תזכורות'),
         backgroundColor: Colors.purple,
       ),
+    ),
     );
   }
 
@@ -331,9 +414,7 @@ class _AdminPaymentControlState extends State<AdminPaymentControl> {
   }
 
   void _refreshData() {
-    setState(() {
-      // Refresh from backend
-    });
+    _loadDoctorPayments();
   }
 
   void _exportReport() {

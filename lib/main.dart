@@ -1,10 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kReleaseMode;
+import 'package:medical_shared/medical_shared.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'services/language_service.dart';
+import 'core/localization/app_localizations.dart';
+import 'core/config/app_config.dart';
 import 'presentation/pages/doctors_page.dart';
 import 'presentation/pages/appointments_page.dart';
 import 'presentation/pages/login_page.dart';
 import 'presentation/pages/register_page.dart';
+import 'presentation/pages/forgot_password_page.dart';
 import 'presentation/pages/calendar_booking_page.dart';
 import 'presentation/pages/payment_page.dart';
 import 'presentation/pages/reschedule_page.dart';
@@ -14,7 +23,6 @@ import 'presentation/pages/video_call_page.dart';
 import 'presentation/pages/privacy_page.dart';
 import 'presentation/pages/receipt_page.dart';
 import 'presentation/pages/profile_page.dart';
-import 'presentation/pages/admin_page.dart';
 import 'presentation/pages/doctor_dashboard_page.dart' as old_doctor;
 import 'presentation/pages/admin_dashboard_redesigned.dart';
 import 'presentation/pages/admin_full_dashboard.dart';
@@ -22,39 +30,68 @@ import 'presentation/pages/doctor_dashboard_redesigned.dart'
     as redesigned_doctor;
 import 'presentation/pages/patient_dashboard_redesigned.dart'
     as redesigned_patient;
+import 'presentation/pages/receptionist_dashboard_page.dart';
 import 'presentation/pages/developer_control_page.dart';
 import 'presentation/pages/developer_specialty_settings.dart';
-import 'presentation/pages/developer_database_page.dart';
+import 'presentation/pages/developer_database_page_stub.dart'
+    if (dart.library.io) 'presentation/pages/developer_database_page.dart';
 import 'presentation/pages/doctor_profile_page.dart';
 import 'presentation/pages/create_patient_page.dart';
+import 'presentation/pages/patient_management_page.dart';
 import 'presentation/pages/create_doctor_page.dart';
 import 'presentation/pages/customer_registration_page.dart';
 import 'presentation/pages/doctor_create_customer_page.dart';
 import 'presentation/pages/email_completion_page.dart';
 import 'presentation/pages/doctor_treatment_settings_page_simple.dart';
-import 'presentation/pages/location_search_page_simple.dart';
+import 'presentation/pages/location_search_hierarchical.dart';
 import 'presentation/pages/treatment_completion_page.dart';
 import 'presentation/pages/booking_management_page.dart';
-import 'presentation/pages/security_dashboard_page.dart';
+import 'presentation/pages/doctor_calendar_page.dart';
+import 'presentation/pages/doctor_booking_page.dart';
+import 'presentation/pages/security_dashboard_page_stub.dart'
+    if (dart.library.io) 'presentation/pages/security_dashboard_page.dart';
 // import 'presentation/pages/system_logs_enhanced.dart';
 import 'presentation/pages/system_logs_lite.dart';
 import 'presentation/pages/cart_page.dart';
 import 'presentation/pages/doctor_appointment_config_page.dart';
-import 'presentation/pages/developer_doctors_page.dart';
-import 'presentation/pages/developer_customers_page.dart';
 import 'presentation/pages/developer_payments_page.dart';
+import 'presentation/pages/doctors_list_page.dart';
+import 'presentation/pages/users_list_page.dart';
 import 'presentation/pages/payment_settings_page.dart';
 import 'presentation/pages/admin_payment_control.dart';
 import 'presentation/pages/admin_permissions.dart';
+import 'presentation/pages/cyber_security_page.dart';
 import 'presentation/pages/admin_all_appointments.dart';
+import 'presentation/pages/calendar_connection_page.dart';
 import 'presentation/pages/test_simple_page.dart';
+import 'presentation/pages/comprehensive_test_page.dart';
+import 'presentation/pages/comprehensive_functional_test_page.dart';
 import 'presentation/pages/coming_soon_page.dart';
+import 'presentation/pages/forms_documents_page.dart';
+import 'presentation/pages/crm_communication_page.dart';
+import 'presentation/pages/finance_operations_page.dart';
+import 'presentation/pages/integrations_operations_page.dart';
+import 'presentation/pages/admin_health_page.dart';
+import 'presentation/widgets/permissions_watcher.dart';
 import 'core/config/dev_credentials.dart';
 import 'core/config/release_config.dart';
 
-void main() {
-  // FR-14: Register app lifecycle observer to save logs on close
+Future<void> main() async {
+  assert(medicalSharedPackageVersion.isNotEmpty);
   WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.initialize();
+  // Lock language to Hebrew for now (all pages except Login are Hebrew; Login shows Hebrew only)
+  await LanguageService.setLanguage('עברית');
+  
+  // Debug: Print build mode information
+  if (kDebugMode) {
+    print('🔍 DEVELOPMENT MODE ACTIVE');
+    print('🔍 kDebugMode: $kDebugMode');
+    print('🔍 kReleaseMode: $kReleaseMode');
+    print('🔍 shouldShowComingSoon(): ${shouldShowComingSoon()}');
+    print('🔍 Will show: ${shouldShowComingSoon() ? "Coming Soon Page" : "Login Page"}');
+  }
+  
   runApp(const MedicalAppointmentApp());
 }
 
@@ -64,34 +101,141 @@ void main() {
 // Coming Soon automatically shows in production, hidden in development
 const bool IS_PRE_RELEASE = true; // Change to false when ready for public release
 
-// Show Coming Soon only in production builds (release mode)
-// In development (debug mode), always show the app
+// Show Coming Soon ONLY in production release builds
+// In development (debug mode), ALWAYS show the app (never show Coming Soon)
 bool shouldShowComingSoon() {
-  // In debug/development mode, never show coming soon
+  // FORCE: In debug/development mode, NEVER show coming soon - always show app
+  // This is checked FIRST to ensure development always works
   if (kDebugMode) {
-    return false; // Always show app in development
+    print('🔍 DEBUG MODE: Coming Soon DISABLED - Showing Login Page');
+    return false; // Development: Always show app, never Coming Soon
   }
-  // In release/production mode, check the toggle
-  return IS_PRE_RELEASE;
+  
+  // Only check IS_PRE_RELEASE in release/production builds
+  if (kReleaseMode) {
+    print('🔍 RELEASE MODE: Coming Soon = ${IS_PRE_RELEASE ? "ENABLED" : "DISABLED"}');
+    return IS_PRE_RELEASE; // Production: Show Coming Soon if IS_PRE_RELEASE = true
+  }
+  
+  // For any other mode (profile, etc.), don't show coming soon
+  print('🔍 OTHER MODE: Coming Soon DISABLED');
+  return false;
 }
 
-class MedicalAppointmentApp extends StatelessWidget {
+class MedicalAppointmentApp extends StatefulWidget {
   const MedicalAppointmentApp({super.key});
 
   @override
+  State<MedicalAppointmentApp> createState() => _MedicalAppointmentAppState();
+}
+
+class _MedicalAppointmentAppState extends State<MedicalAppointmentApp> {
+  Locale _locale = const Locale('he', 'IL'); // Hebrew only for now
+  static _MedicalAppointmentAppState? _instance;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  bool _languagePollActive = true;
+  Timer? _languagePollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _instance = this;
+    HardwareKeyboard.instance.addHandler(_handleHardwareBackKey);
+    _loadLanguage();
+    // Listen for language changes
+    _startLanguageListener();
+  }
+
+  @override
+  void dispose() {
+    _languagePollActive = false;
+    _languagePollTimer?.cancel();
+    _languagePollTimer = null;
+    HardwareKeyboard.instance.removeHandler(_handleHardwareBackKey);
+    super.dispose();
+  }
+
+  /// Windows/Linux: mouse side "back" and Browser Back / Go Back keys.
+  bool _handleHardwareBackKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final logical = event.logicalKey;
+    if (logical != LogicalKeyboardKey.browserBack &&
+        logical != LogicalKeyboardKey.goBack) {
+      return false;
+    }
+    final nav = _navigatorKey.currentState;
+    if (nav != null && nav.canPop()) {
+      nav.pop();
+      return true;
+    }
+    return false;
+  }
+
+  void _startLanguageListener() {
+    _languagePollTimer?.cancel();
+    _languagePollTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!_languagePollActive || !mounted) return;
+      _checkLanguageChange();
+      _startLanguageListener();
+    });
+  }
+
+  Future<void> _checkLanguageChange() async {
+    final newLocale = await LanguageService.getCurrentLocale();
+    if (newLocale != _locale && mounted) {
+      setState(() {
+        _locale = newLocale;
+      });
+      // Force rebuild of MaterialApp to apply language change
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _loadLanguage() async {
+    // Lock to Hebrew for now
+    if (mounted) setState(() => _locale = const Locale('he', 'IL'));
+  }
+
+  // Static method to reload language from anywhere
+  static void reloadLanguage() {
+    _instance?._loadLanguage();
+  }
+  
+  // Force immediate language reload
+  void forceLanguageReload() {
+    _loadLanguage();
+    _checkLanguageChange();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // FORCE: In development (kDebugMode), NEVER show Coming Soon
+    // Always show LoginPage in debug mode
+    final bool showComingSoon = false; // Always false - we're in development
+    
+    if (kDebugMode) {
+      print('🔍 BUILD: kDebugMode=$kDebugMode, kReleaseMode=$kReleaseMode');
+      print('🔍 BUILD: showComingSoon=$showComingSoon (FORCED TO FALSE)');
+      print('🔍 BUILD: Will show LoginPage');
+    }
+    
     return MaterialApp(
-      title: 'Medical Appointment System',
+      navigatorKey: _navigatorKey,
+      title: 'מערכת תורים רפואיים',
       debugShowCheckedModeBanner: false,
-      // FR-21: Hebrew only for now
-      locale: const Locale('he', 'IL'),
+      locale: _locale,
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('he', 'IL'), // Hebrew only
+        Locale('he', 'IL'),
+        Locale('ar', 'SA'),
+        Locale('en', 'US'),
       ],
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -108,36 +252,62 @@ class MedicalAppointmentApp extends StatelessWidget {
           bodyMedium: TextStyle(color: Colors.black),
         ),
       ),
-      // FR-22: Mouse back button support - Enhanced
+      // FR-22: System back (Android) + mouse X1 back + Browser Back key (desktop)
       builder: (context, child) {
-        return WillPopScope(
-          onWillPop: () async {
-            // Handle back button (including mouse back button)
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-              return false;
-            }
-            return true;
-          },
-          child: MouseRegion(
-            // Enable mouse button navigation
-            onExit: (_) {
-              // Mouse back button will trigger WillPopScope
+        return PermissionsWatcher(
+          child: WillPopScope(
+            onWillPop: () async {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+                return false;
+              }
+              return true;
             },
-            child: child!,
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (PointerDownEvent event) {
+                if (event.kind == PointerDeviceKind.mouse &&
+                    (event.buttons & kBackMouseButton) != 0) {
+                  final nav = _navigatorKey.currentState;
+                  if (nav != null && nav.canPop()) {
+                    nav.pop();
+                  }
+                }
+              },
+              child: child!,
+            ),
           ),
         );
       },
-      home: shouldShowComingSoon() ? const ComingSoonPage() : const LoginPage(),
+      // showComingSoon is fixed false above; keep single home to avoid dead_code analysis.
+      home: const LoginPage(),
       routes: {
         '/login': (context) => const LoginPage(),
-        '/home': (context) => const HomePage(),
+        '/home': (context) {
+          // PD-04: Show Patient Dashboard for patients (matches provided design)
+          // Check role from route arguments
+          final args = ModalRoute.of(context)?.settings.arguments;
+          final role = args is Map<String, dynamic> ? (args['role'] as String?) : null;
+          
+          // Show role-specific dashboards
+          if (role == 'doctor') {
+            return const redesigned_doctor.DoctorDashboardPage();
+          } else if (role == 'receptionist') {
+            return const ReceptionistDashboardPage();
+          } else if (role == 'developer' || role == 'admin') {
+            return const AdminFullDashboard();
+          }
+          // PD-04: Always show Patient Dashboard for patients/customers (matches design)
+          return const redesigned_patient.PatientDashboardPage();
+        },
         '/doctors': (context) => const DoctorsPage(),
         '/appointments': (context) =>
             const AdminAllAppointments(), // Admin view: ALL appointments
         '/my-appointments': (context) =>
             const AppointmentsPage(), // User view: My appointments
         '/register': (context) => const RegisterPage(),
+        '/forgot-password': (context) => const ForgotPasswordPage(),
+        '/receptionist-dashboard': (context) => const ReceptionistDashboardPage(),
         '/doctor-dashboard': (context) =>
             const redesigned_doctor.DoctorDashboardPage(),
         '/doctor-dashboard-old': (context) =>
@@ -146,14 +316,19 @@ class MedicalAppointmentApp extends StatelessWidget {
         '/developer-control-old': (context) => const DeveloperControlPage(),
         '/developer-specialty-settings': (context) =>
             const DeveloperSpecialtySettings(),
-        '/developer-database': (context) => const DeveloperDatabasePage(),
+        '/developer-database': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          final isReadOnly = args is Map<String, dynamic> && args['readOnly'] == true;
+          return DeveloperDatabasePage(isReadOnly: isReadOnly);
+        },
         '/doctor-profile': (context) => const DoctorProfilePage(),
         '/create-patient': (context) => const CreatePatientPage(),
         '/create-doctor': (context) => const CreateDoctorPage(isAdmin: true),
-        '/manage-users': (context) => const AdminPage(),
+        '/manage-users': (context) => const UsersListPage(),
         '/system-logs': (context) => const SystemLogsLitePage(),
         '/notifications': (context) => const NotificationsPage(),
         '/settings': (context) => const SettingsPage(),
+        '/calendar-connection': (context) => const CalendarConnectionPage(),
         '/privacy': (context) => const PrivacyPage(),
         '/calendar-booking': (context) => const CalendarBookingPage(
               doctorId: '',
@@ -168,13 +343,18 @@ class MedicalAppointmentApp extends StatelessWidget {
               timeSlot: '',
               amount: 0,
             ),
-        '/reschedule': (context) => ReschedulePage(
-              appointmentId: '',
-              doctorName: '',
-              specialty: '',
-              currentDate: DateTime.now(),
-              currentTimeSlot: '',
-            ),
+        '/reschedule': (context) {
+          final args =
+              ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          return ReschedulePage(
+            appointmentId: args?['appointmentId'] ?? '',
+            doctorId: args?['doctorId'] ?? '',
+            doctorName: args?['doctorName'] ?? '',
+            specialty: args?['specialty'] ?? '',
+            currentDate: args?['currentDate'] ?? DateTime.now(),
+            currentTimeSlot: args?['currentTimeSlot'] ?? '',
+          );
+        },
         '/video-call': (context) => const VideoCallPage(
               appointmentId: '',
               doctorName: '',
@@ -193,10 +373,21 @@ class MedicalAppointmentApp extends StatelessWidget {
         },
         '/doctor-treatment-settings': (context) =>
             const DoctorTreatmentSettingsPage(),
-        '/location-search': (context) => const LocationSearchPage(),
+        '/location-search': (context) => const LocationSearchHierarchicalPage(),
         '/treatment-completion': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments
-              as Map<String, dynamic>;
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is! Map<String, dynamic>) {
+            return Scaffold(
+              appBar: AppBar(
+                title: const Text('סיום טיפול'),
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              body: const Center(
+                child: Text('לא נמצאו פרטי טיפול. נא לפתוח מטופל מתוך תור קיים.'),
+              ),
+            );
+          }
           return TreatmentCompletionPage(
             appointmentId: args['appointmentId'],
             patientId: args['patientId'],
@@ -207,11 +398,15 @@ class MedicalAppointmentApp extends StatelessWidget {
           );
         },
         '/booking-management': (context) => const BookingManagementPage(),
+        '/doctor-calendar': (context) => const DoctorCalendarPage(),
+        '/doctor-patients': (context) => const PatientManagementPage(),
+        '/doctor-booking': (context) => const DoctorBookingPage(),
+        '/messages': (context) => const NotificationsPage(),
         '/security-dashboard': (context) => const SecurityDashboardPage(),
-        '/admin': (context) => const AdminPage(),
+        '/admin': (context) => const UsersListPage(),
         '/cart': (context) => const CartPage(),
-        '/doctors-list': (context) => const DeveloperDoctorsPage(),
-        '/users-list': (context) => const DeveloperCustomersPage(),
+        '/doctors-list': (context) => const DoctorsListPage(),
+        '/users-list': (context) => const UsersListPage(),
         '/payments-list': (context) => const DeveloperPaymentsPage(),
         '/appointments-list': (context) =>
             const AppointmentsPage(), // Use appointments page
@@ -221,7 +416,15 @@ class MedicalAppointmentApp extends StatelessWidget {
             const PaymentSettingsPage(), // FR-7b: Card details
         '/admin-payment-control': (context) => const AdminPaymentControl(),
         '/admin-permissions': (context) => const AdminPermissions(),
+        '/cyber-security': (context) => const CyberSecurityPage(),
         '/test-simple': (context) => const TestSimplePage(),
+        '/comprehensive-test': (context) => const ComprehensiveTestPage(),
+        '/functional-test': (context) => const ComprehensiveFunctionalTestPage(),
+        '/forms-documents': (context) => const FormsDocumentsPage(),
+        '/crm-communication': (context) => const CrmCommunicationPage(),
+        '/finance-operations': (context) => const FinanceOperationsPage(),
+        '/integrations-operations': (context) => const IntegrationsOperationsPage(),
+        '/admin-health': (context) => const AdminHealthPage(),
       },
     );
   }
@@ -384,7 +587,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Medical Appointment System'),
+          title: const Text('מערכת תורים רפואיים'),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
         ),
@@ -407,19 +610,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: 10),
-              Text(
-                'Welcome to Medical Appointment System',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-              ),
               SizedBox(height: 30),
               CircularProgressIndicator(),
               SizedBox(height: 20),
               Text(
-                'Loading...',
+                'טוען...',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey,
@@ -549,22 +744,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Colors.grey, '/settings'),
         ];
       case 'developer':
-        // Admin/Developer features - always shown in release mode
-        // Admin account gets full control in production
+        // Developer – keep in English
         return [
-          _buildHomeCard(context, 'לוח בקרה', 'סקירה כללית של המערכת',
+          _buildHomeCard(context, 'Dashboard', 'System overview',
               Icons.dashboard, Colors.red, '/developer-control'),
-          _buildHomeCard(context, 'לוח אבטחה', 'מעקב אבטחה וניטור',
+          _buildHomeCard(context, 'Security Dashboard', 'Security monitoring',
               Icons.security, Colors.red.shade800, '/security-dashboard'),
-          _buildHomeCard(context, 'יצירת רופא', 'הוסף רופא חדש',
+          _buildHomeCard(context, 'Create Doctor', 'Add new doctor',
               Icons.medical_services, Colors.red.shade700, '/create-doctor'),
-          _buildHomeCard(context, 'יצירת מטופל', 'הוסף מטופל חדש',
+          _buildHomeCard(context, 'Create Patient', 'Add new patient',
               Icons.person_add, Colors.red.shade600, '/create-patient'),
-          _buildHomeCard(context, 'ניהול משתמשים', 'צפה בכל המשתמשים',
+          _buildHomeCard(context, 'Manage Users', 'View all users',
               Icons.group, Colors.red.shade500, '/manage-users'),
-          _buildHomeCard(context, 'יומני מערכת', 'צפה ביומני ביקורת ושגיאות',
+          _buildHomeCard(context, 'System Logs', 'View audit and error logs',
               Icons.receipt_long, Colors.brown, '/system-logs'),
-          _buildHomeCard(context, 'הגדרות מערכת', 'הגדרות גלובליות',
+          _buildHomeCard(context, 'System Settings', 'Global settings',
               Icons.settings, Colors.grey, '/settings'),
         ];
       case 'customer':
@@ -573,8 +767,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Icons.medical_services, Colors.blue, '/doctors'),
           _buildHomeCard(context, 'חיפוש לפי מיקום', 'חפש רופאים באזור שלך',
               Icons.location_on, Colors.blue.shade600, '/location-search'),
-          _buildHomeCard(context, 'עגלת תורים', 'תורים מרובים בתשלום אחד',
-              Icons.shopping_cart, Colors.purple, '/cart'),
+          // SRS Rev 02 §4.9: cart disabled; entry uses SOON in sidebar (not on this grid).
           _buildHomeCard(context, 'התורים שלי', 'צפה ונהל תורים',
               Icons.calendar_today, Colors.blue.shade700, '/appointments'),
           _buildHomeCard(context, 'התראות', 'הודעות ועדכונים',
@@ -589,8 +782,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Icons.medical_services, Colors.blue, '/doctors'),
           _buildHomeCard(context, 'חיפוש לפי מיקום', 'חפש רופאים באזור שלך',
               Icons.location_on, Colors.blue.shade600, '/location-search'),
-          _buildHomeCard(context, 'עגלת תורים', 'תורים מרובים בתשלום אחד',
-              Icons.shopping_cart, Colors.purple, '/cart'),
+          // SRS Rev 02 §4.9: cart disabled; entry uses SOON in sidebar (not on this grid).
           _buildHomeCard(context, 'התורים שלי', 'צפה ונהל תורים',
               Icons.calendar_today, Colors.blue.shade700, '/appointments'),
           _buildHomeCard(context, 'התראות', 'הודעות ועדכונים',
@@ -638,7 +830,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case 'admin':
         return 'מנהל';
       case 'developer':
-        return 'מפתח';
+        return 'Developer';
       case 'customer':
         return 'לקוח';
       default:
@@ -671,6 +863,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 textAlign: TextAlign.center,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Placeholder for doctor patients list until a full page is implemented.
+class _DoctorPatientsPlaceholderPage extends StatelessWidget {
+  const _DoctorPatientsPlaceholderPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('מטופלים'),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+      ),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            'רשימת המטופלים תופיע כאן. ניתן ליצור מטופלים מדף לוח הבקרה או מתוך התורים.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
           ),
         ),
       ),

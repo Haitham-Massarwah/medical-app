@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/auth_service.dart';
+import '../../services/patient_service.dart';
+import '../../services/user_service.dart';
 
 class CreatePatientPage extends StatefulWidget {
   const CreatePatientPage({super.key});
@@ -10,7 +11,8 @@ class CreatePatientPage extends StatefulWidget {
 
 class _CreatePatientPageState extends State<CreatePatientPage> {
   final _formKey = GlobalKey<FormState>();
-  final _authService = AuthService();
+  final PatientService _patientService = PatientService();
+  final UserService _userService = UserService();
 
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -305,19 +307,12 @@ class _CreatePatientPageState extends State<CreatePatientPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Create user account first
-      final userData = {
+      final patientData = {
         'email': _emailController.text.trim(),
         'password': 'Patient123', // Temporary password until first login
         'first_name': _firstNameController.text.trim(),
         'last_name': _lastNameController.text.trim(),
         'phone': _phoneController.text.trim(),
-        'city': _cityController.text.trim(),
-        'role': 'patient',
-      };
-
-      // Create patient profile (FR-3: Medical info removed)
-      final patientData = {
         'emergency_contact_enabled': _emergencyContactEnabled,
         'emergency_contact_name': _emergencyContactEnabled
             ? _emergencyContactNameController.text.trim()
@@ -326,9 +321,17 @@ class _CreatePatientPageState extends State<CreatePatientPage> {
             ? _emergencyContactPhoneController.text.trim()
             : null,
       };
-
-      // TODO: Implement actual API call to create patient
-      await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+      
+      final patient = await _patientService.createPatient(patientData);
+      final userId = patient['user_id']?.toString();
+      if (userId != null && _cityController.text.trim().isNotEmpty) {
+        await _userService.updateUser(
+          userId: userId,
+          data: {
+            'city': _cityController.text.trim(),
+          },
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { asyncHandler, NotFoundError } from '../middleware/errorHandler';
+import { asyncHandler, NotFoundError, AuthenticationError } from '../middleware/errorHandler';
 import db from '../config/database';
 import { logger } from '../config/logger';
 
@@ -10,7 +10,7 @@ export class DoctorController {
    */
   getAllDoctors = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { page, limit, offset } = (req as any).pagination;
-    const { specialty, language, search, city, area } = req.query;
+    const { specialty, language, search, city: _city, area: _area } = req.query;
 
     let query = db('doctors')
       .join('users', 'doctors.user_id', 'users.id')
@@ -89,7 +89,7 @@ export class DoctorController {
    */
   searchDoctors = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { page, limit, offset } = (req as any).pagination;
-    const { q, specialty, min_rating, max_fee } = req.query;
+    const { q, specialty, min_rating, max_fee: _max_fee } = req.query;
 
     let query = db('doctors')
       .join('users', 'doctors.user_id', 'users.id')
@@ -175,6 +175,44 @@ export class DoctorController {
   });
 
   /**
+   * Get current doctor's profile
+   * GET /api/v1/doctors/me
+   */
+  getMyDoctorProfile = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.user?.userId || req.user?.id;
+    const tenantId = req.tenantId || req.user?.tenantId || req.user?.tenant_id;
+    if (!userId || !tenantId) {
+      throw new AuthenticationError('User not authenticated');
+    }
+
+    const doctor = await db('doctors')
+      .join('users', 'doctors.user_id', 'users.id')
+      .where('doctors.user_id', userId)
+      .andWhere('doctors.tenant_id', tenantId)
+      .andWhere('doctors.is_active', true)
+      .select(
+        'doctors.*',
+        'users.first_name',
+        'users.last_name',
+        'users.email',
+        'users.phone',
+        'doctors.specialty as specialty_name'
+      )
+      .first();
+
+    if (!doctor) {
+      throw new NotFoundError('Doctor');
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        doctor,
+      },
+    });
+  });
+
+  /**
    * Get doctor availability
    * GET /api/v1/doctors/:id/availability
    */
@@ -185,7 +223,7 @@ export class DoctorController {
     // Verify doctor exists
     const doctor = await db('doctors')
       .where({ id })
-      .andWhere('deleted_at', null)
+      .andWhere('is_active', true)
       .first();
 
     if (!doctor) {
@@ -193,7 +231,7 @@ export class DoctorController {
     }
 
     // Get working hours
-    const workingHours = await db('doctor_working_hours')
+    const workingHours = await db('availability')
       .where({ doctor_id: id });
 
     // Get appointments for the date (if provided)
@@ -268,13 +306,15 @@ export class DoctorController {
       user_id,
       specialty_id,
       license_number,
-      years_of_experience,
+      years_of_experience: _years_of_experience,
       bio,
       education,
-      certifications,
       languages,
-      consultation_fee,
+      consultation_fee: _consultation_fee,
     } = req.body;
+    const normalizedEducation = Array.isArray(education)
+      ? education.join(', ')
+      : education;
 
     const [doctor] = await db('doctors')
       .insert({
@@ -283,8 +323,7 @@ export class DoctorController {
         specialty: req.body.specialty || specialty_id || 'General',
         license_number,
         bio,
-        education,
-        certifications,
+        education: normalizedEducation,
         languages,
         rating: 0,
         review_count: 0,
@@ -312,14 +351,20 @@ export class DoctorController {
     const { id } = req.params;
     const tenantId = req.tenantId!;
 
+    const { education, certifications: _certifications, ...rest } = req.body;
     const updateData: any = {
-      ...req.body,
+      ...rest,
       updated_at: new Date(),
     };
+    if (education !== undefined) {
+      updateData.education = Array.isArray(education)
+        ? education.join(', ')
+        : education;
+    }
 
     const [doctor] = await db('doctors')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
+      .andWhere('is_active', true)
       .update(updateData)
       .returning('*');
 
@@ -347,7 +392,7 @@ export class DoctorController {
     const { working_hours } = req.body;
 
     // Delete existing schedule
-    await db('doctor_working_hours')
+    await db('availability')
       .where({ doctor_id: id })
       .delete();
 
@@ -361,7 +406,7 @@ export class DoctorController {
       updated_at: new Date(),
     }));
 
-    await db('doctor_working_hours').insert(scheduleData);
+    await db('availability').insert(scheduleData);
 
     logger.info(`Doctor schedule updated: ${id}`);
 
@@ -432,8 +477,13 @@ export class DoctorController {
     const { page, limit, offset } = (req as any).pagination;
     const { status, date } = req.query;
 
+    const [hasServicesTable, hasServiceIdColumn] = await Promise.all([
+      db.schema.hasTable('services'),
+      db.schema.hasColumn('appointments', 'service_id'),
+    ]);
+
     let query = db('appointments')
-      .where({ doctor_id: id });
+      .where('appointments.doctor_id', id);
 
     if (status) query = query.andWhere({ status });
     if (date) query = query.andWhere('appointment_date', date);
@@ -441,13 +491,28 @@ export class DoctorController {
     const countResult = await query.clone().count('* as count').first();
     const totalCount = countResult ? parseInt(String((countResult as any).count)) : 0;
 
-    const appointments = await query
-      .join('users', 'appointments.patient_id', 'users.id')
-      .select(
+    let appointmentsQuery = query
+      .join('patients', 'appointments.patient_id', 'patients.id')
+      .join('users', 'patients.user_id', 'users.id');
+
+    if (hasServicesTable && hasServiceIdColumn) {
+      appointmentsQuery = appointmentsQuery.leftJoin(
+        'services',
+        'appointments.service_id',
+        'services.id'
+      );
+    }
+
+    const appointments = await appointmentsQuery
+      .select([
         'appointments.*',
         'users.first_name as patient_first_name',
-        'users.last_name as patient_last_name'
-      )
+        'users.last_name as patient_last_name',
+        'users.phone as patient_phone',
+        ...(hasServicesTable && hasServiceIdColumn
+          ? ['services.name as service_name', 'services.price as service_price']
+          : [db.raw('NULL as service_name'), db.raw('NULL as service_price')]),
+      ])
       .orderBy('appointments.appointment_date', 'desc')
       .limit(limit)
       .offset(offset);

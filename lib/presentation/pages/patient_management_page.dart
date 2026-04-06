@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../services/patient_service.dart';
+import 'create_patient_page.dart';
 
 class PatientManagementPage extends StatefulWidget {
   const PatientManagementPage({super.key});
@@ -8,77 +10,46 @@ class PatientManagementPage extends StatefulWidget {
 }
 
 class _PatientManagementPageState extends State<PatientManagementPage> {
-  final List<Map<String, dynamic>> _patients = [
-    {
-      'id': '1',
-      'name': 'יוסי כהן',
-      'phone': '050-1234567',
-      'email': 'yossi@example.com',
-      'idNumber': '123456789',
-      'birthDate': '1985-03-15',
-      'lastVisit': '2024-01-10',
-      'status': 'active',
-      'appointments': 12,
-    },
-    {
-      'id': '2',
-      'name': 'שרה לוי',
-      'phone': '052-9876543',
-      'email': 'sara@example.com',
-      'idNumber': '987654321',
-      'birthDate': '1990-07-22',
-      'lastVisit': '2024-01-08',
-      'status': 'active',
-      'appointments': 8,
-    },
-    {
-      'id': '3',
-      'name': 'דוד ישראלי',
-      'phone': '054-5555555',
-      'email': 'david@example.com',
-      'idNumber': '456789123',
-      'birthDate': '1978-11-05',
-      'lastVisit': '2024-01-05',
-      'status': 'inactive',
-      'appointments': 5,
-    },
-    {
-      'id': '4',
-      'name': 'רחל אברהם',
-      'phone': '050-7777777',
-      'email': 'rachel@example.com',
-      'idNumber': '789123456',
-      'birthDate': '1992-09-18',
-      'lastVisit': '2024-01-12',
-      'status': 'active',
-      'appointments': 15,
-    },
-    {
-      'id': '5',
-      'name': 'משה כהן',
-      'phone': '052-3333333',
-      'email': 'moshe@example.com',
-      'idNumber': '321654987',
-      'birthDate': '1988-12-03',
-      'lastVisit': '2023-12-28',
-      'status': 'inactive',
-      'appointments': 3,
-    },
-    {
-      'id': '6',
-      'name': 'אסתר גולד',
-      'phone': '054-1111111',
-      'email': 'ester@example.com',
-      'idNumber': '654321987',
-      'birthDate': '1983-04-25',
-      'lastVisit': '2024-01-14',
-      'status': 'active',
-      'appointments': 20,
-    },
-  ];
+  final PatientService _patientService = PatientService();
+  List<Map<String, dynamic>> _patients = [];
+  bool _isLoading = true;
 
   String _selectedStatus = 'כל המטופלים';
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPatients();
+  }
+
+  Future<void> _loadPatients() async {
+    setState(() => _isLoading = true);
+    try {
+      final patients = await _patientService.getPatients(search: _searchQuery.isEmpty ? null : _searchQuery);
+      setState(() {
+        _patients = patients.map((p) => {
+          'id': p['id']?.toString() ?? '',
+          'name': '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim(),
+          'phone': p['phone'] ?? '',
+          'email': p['email'] ?? '',
+          'first_name': p['first_name'] ?? '',
+          'last_name': p['last_name'] ?? '',
+        }).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('שגיאה בטעינת מטופלים: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -122,6 +93,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                             setState(() {
                               _searchQuery = value;
                             });
+                            _loadPatients();
                           },
                         ),
                       ),
@@ -153,10 +125,26 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           ),
           // Patients List
           Expanded(
-            child: ListView.builder(
-              itemCount: _getFilteredPatients().length,
-              itemBuilder: (context, index) {
-                final patient = _getFilteredPatients()[index];
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _getFilteredPatients().isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                            SizedBox(height: 16),
+                            Text(
+                              'אין מטופלים',
+                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _getFilteredPatients().length,
+                        itemBuilder: (context, index) {
+                          final patient = _getFilteredPatients()[index];
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: ListTile(
@@ -174,10 +162,10 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('טלפון: ${patient['phone']}'),
-                        Text('תאריך לידה: ${patient['birthDate']}'),
-                        Text('ביקור אחרון: ${patient['lastVisit']}'),
-                        Text('מספר תורים: ${patient['appointments']}'),
+                        if (patient['phone'] != null && patient['phone'].toString().isNotEmpty)
+                          Text('טלפון: ${patient['phone']}'),
+                        if (patient['email'] != null && patient['email'].toString().isNotEmpty)
+                          Text('אימייל: ${patient['email']}'),
                       ],
                     ),
                     trailing: Row(
@@ -200,7 +188,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                         ),
                       ],
                     ),
-                    isThreeLine: true,
+                    isThreeLine: false,
                   ),
                 );
               },
@@ -212,33 +200,21 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
   }
 
   List<Map<String, dynamic>> _getFilteredPatients() {
-    return _patients.where((patient) {
-      final matchesSearch = _searchQuery.isEmpty ||
-          patient['name'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          patient['phone'].toString().contains(_searchQuery) ||
-          patient['email'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
-      
-      final matchesStatus = _selectedStatus == 'כל המטופלים' ||
-          patient['status'] == _selectedStatus;
-      
-      return matchesSearch && matchesStatus;
-    }).toList();
+    // Search is handled by API, so we just filter by status if needed
+    if (_selectedStatus == 'כל המטופלים') {
+      return _patients;
+    }
+    // Note: Status filtering would need to be added to the API or handled here
+    return _patients;
   }
 
   void _addPatient() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('הוסף מטופל חדש'),
-        content: const Text('פונקציונליות הוספת מטופל חדש תהיה זמינה בקרוב'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('אישור'),
-          ),
-        ],
-      ),
-    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreatePatientPage()),
+    ).then((_) {
+      _loadPatients(); // Reload patients after creating a new one
+    });
   }
 
   void _editPatient(Map<String, dynamic> patient) {

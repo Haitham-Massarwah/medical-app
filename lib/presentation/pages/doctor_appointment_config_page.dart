@@ -157,7 +157,7 @@ class _DoctorAppointmentConfigPageState extends State<DoctorAppointmentConfigPag
                       const Text('אפשר תשלום אונליין'),
                       const SizedBox(width: 12),
                       if (!_enableOnlinePayment)
-                        const Text('Soon', style: TextStyle(color: Colors.orange)),
+                        const Text('בקרוב', style: TextStyle(color: Colors.orange)),
                     ],
                   ),
                   const SizedBox(height: 8),

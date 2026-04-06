@@ -1,4 +1,4 @@
-import { JwtPayload } from 'jsonwebtoken';
+import 'jsonwebtoken';
 
 declare global {
   namespace Express {
@@ -14,12 +14,13 @@ declare global {
   }
 }
 
-// Extend JwtPayload to include our custom properties
+// Augment JwtPayload with app-specific claims (merges with jsonwebtoken types)
 declare module 'jsonwebtoken' {
-  export interface JwtPayload {
-    id: string;
-    email: string;
-    role: string;
+  interface JwtPayload {
+    id?: string;
+    userId?: string;
+    email?: string;
+    role?: string;
     tenant_id?: string;
   }
 }

@@ -157,7 +157,7 @@ const sendWhatsAppNotification = async (
 const sendPushNotification = async (
   userId: string,
   type: string,
-  data: any
+  _data: any
 ): Promise<void> => {
   // TODO: Implement Firebase Cloud Messaging
   logger.info(`Push notification would be sent to user ${userId}: ${type}`);

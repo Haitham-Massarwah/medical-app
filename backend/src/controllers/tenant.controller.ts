@@ -12,25 +12,37 @@ export class TenantController {
     const { page, limit, offset } = (req as any).pagination;
     const { search, is_active } = req.query;
 
-    let query = db('tenants').where('deleted_at', null);
+    // Some deployments may have slightly different tenants table schemas.
+    // Detect optional columns to avoid runtime 500s (e.g., is_active).
+    const columnsResult = await db('information_schema.columns')
+      .where({ table_name: 'tenants' })
+      .select('column_name');
+    const columns = new Set(columnsResult.map((r: any) => (r.column_name as string)));
+    const hasIsActive = columns.has('is_active');
+    const hasCreatedAt = columns.has('created_at');
+
+    let query = db('tenants') as any;
+    if (hasIsActive) {
+      query = query.where('is_active', true);
+    }
 
     // Search by name or subdomain
     if (search) {
-      query = query.andWhere(function() {
+      query = query.andWhere(function(this: any) {
         this.where('name', 'ilike', `%${search}%`)
           .orWhere('subdomain', 'ilike', `%${search}%`);
       });
     }
 
     // Filter by status
-    if (is_active !== undefined) {
+    if (is_active !== undefined && hasIsActive) {
       query = query.andWhere({ is_active: is_active === 'true' });
     }
 
     const [{ count }] = await query.clone().count('* as count');
 
     const tenants = await query
-      .orderBy('created_at', 'desc')
+      .orderBy(hasCreatedAt ? 'created_at' : 'id', 'desc')
       .limit(limit)
       .offset(offset);
 
@@ -57,7 +69,6 @@ export class TenantController {
 
     const tenant = await db('tenants')
       .where({ id: tenantId })
-      .andWhere('deleted_at', null)
       .first();
 
     if (!tenant) {
@@ -81,7 +92,6 @@ export class TenantController {
 
     const tenant = await db('tenants')
       .where({ id })
-      .andWhere('deleted_at', null)
       .first();
 
     if (!tenant) {
@@ -116,7 +126,6 @@ export class TenantController {
     // Check if subdomain is already taken
     const existing = await db('tenants')
       .where({ subdomain })
-      .andWhere('deleted_at', null)
       .first();
 
     if (existing) {
@@ -165,7 +174,6 @@ export class TenantController {
 
     const [tenant] = await db('tenants')
       .where({ id })
-      .andWhere('deleted_at', null)
       .update(updateData)
       .returning('*');
 
@@ -206,7 +214,6 @@ export class TenantController {
 
     const [tenant] = await db('tenants')
       .where({ id })
-      .andWhere('deleted_at', null)
       .update({
         settings: JSON.stringify(settings),
         updated_at: new Date(),
@@ -245,7 +252,6 @@ export class TenantController {
 
     const [tenant] = await db('tenants')
       .where({ id })
-      .andWhere('deleted_at', null)
       .update({
         branding: JSON.stringify(branding),
         updated_at: new Date(),
@@ -277,7 +283,6 @@ export class TenantController {
 
     const [tenant] = await db('tenants')
       .where({ id })
-      .andWhere('deleted_at', null)
       .update({
         plan,
         billing_cycle,
@@ -306,11 +311,10 @@ export class TenantController {
    */
   updateStatus = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
-    const { is_active, reason } = req.body;
+    const { is_active, reason: _reason } = req.body;
 
     const [tenant] = await db('tenants')
       .where({ id })
-      .andWhere('deleted_at', null)
       .update({
         is_active,
         updated_at: new Date(),
@@ -342,7 +346,7 @@ export class TenantController {
     await db('tenants')
       .where({ id })
       .update({
-        deleted_at: new Date(),
+        is_active: false,
         updated_at: new Date(),
       });
 
@@ -364,17 +368,15 @@ export class TenantController {
     // Get various statistics
     const [userCount] = await db('users')
       .where({ tenant_id: id })
-      .andWhere('deleted_at', null)
       .count('* as count');
 
     const [doctorCount] = await db('doctors')
       .where({ tenant_id: id })
-      .andWhere('deleted_at', null)
+      .andWhere('is_active', true)
       .count('* as count');
 
     const [patientCount] = await db('patients')
       .where({ tenant_id: id })
-      .andWhere('deleted_at', null)
       .count('* as count');
 
     const appointmentCountResult = await db('appointments')

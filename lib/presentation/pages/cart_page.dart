@@ -91,6 +91,7 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
+    // PD-09: Disable Appointment Cart - show "SOON" label
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -98,23 +99,59 @@ class _CartPageState extends State<CartPage> {
           title: const Text('עגלת תורים'),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
-          actions: [
-            if (_cart != null && _cart!.items.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.delete_sweep),
-                onPressed: _clearCart,
-                tooltip: 'נקה עגלה',
-              ),
-          ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _cart == null || _cart!.items.isEmpty
-                ? _buildEmptyCart()
-                : _buildCartContent(),
-        bottomNavigationBar: _cart != null && _cart!.items.isNotEmpty 
-            ? _buildCheckoutButton() 
-            : null,
+        body: _buildSoonMessage(),
+      ),
+    );
+  }
+
+  // PD-09: Display "SOON" message for disabled cart
+  Widget _buildSoonMessage() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.shopping_cart_outlined,
+            size: 120,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade300, width: 2),
+            ),
+            child: const Text(
+              'SOON',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange,
+                letterSpacing: 4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'עגלת התורים תהיה זמינה בקרוב',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'הפיצ\'ר נמצא בפיתוח',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
       ),
     );
   }

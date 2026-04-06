@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { asyncHandler, NotFoundError, AuthorizationError } from '../middleware/errorHandler';
+import bcrypt from 'bcryptjs';
+import { asyncHandler, NotFoundError, AuthorizationError, ValidationError } from '../middleware/errorHandler';
 import db from '../config/database';
 import { logger } from '../config/logger';
+import { sendEmail } from '../services/email.service';
 
 export class UserController {
   /**
@@ -13,9 +15,16 @@ export class UserController {
     const { search, role, is_active } = req.query;
     const tenantId = req.tenantId!;
 
+    // Some deployments may have slightly different user table schemas.
+    // Detect optional columns to avoid runtime 500s (e.g., is_active).
+    const columnsResult = await db('information_schema.columns')
+      .where({ table_name: 'users' })
+      .select('column_name');
+    const columns = new Set(columnsResult.map((r: any) => (r.column_name as string)));
+    const hasIsActive = columns.has('is_active');
+
     let query = db('users')
-      .where({ tenant_id: tenantId })
-      .andWhere('deleted_at', null);
+      .where({ tenant_id: tenantId });
 
     // Search by name or email
     if (search) {
@@ -32,7 +41,7 @@ export class UserController {
     }
 
     // Filter by status
-    if (is_active !== undefined) {
+    if (is_active !== undefined && hasIsActive) {
       query = query.andWhere({ is_active: is_active === 'true' });
     }
 
@@ -41,7 +50,19 @@ export class UserController {
 
     // Get users
     const users = await query
-      .select('id', 'email', 'first_name', 'last_name', 'phone', 'role', 'is_active', 'email_verified', 'last_login', 'created_at')
+      // NOTE: Some deployments do not include `is_active` in `users`.
+      .select([
+        'id',
+        'email',
+        'first_name',
+        'last_name',
+        'phone',
+        'role',
+        ...(hasIsActive ? (['is_active'] as const) : []),
+        'is_email_verified',
+        'last_login_at',
+        'created_at',
+      ])
       .orderBy('created_at', 'desc')
       .limit(limit)
       .offset(offset);
@@ -57,6 +78,71 @@ export class UserController {
           pages: Math.ceil(parseInt(count as string) / limit),
         },
       },
+    });
+  });
+
+  /**
+   * Create staff user (e.g. receptionist). Admin/Developer only. SRS Rev 02 §2.1.
+   * POST /api/v1/users
+   */
+  createStaffUser = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const tenantId = req.tenantId!;
+    const { email, password, first_name, last_name, phone, role } = req.body;
+
+    if (role !== 'receptionist') {
+      throw new ValidationError('This endpoint currently supports only the receptionist role');
+    }
+    if (!email || !password || !first_name || !last_name) {
+      throw new ValidationError('email, password, first_name, and last_name are required');
+    }
+
+    const existing = await db('users').where({ email, tenant_id: tenantId }).first();
+    if (existing) {
+      throw new ValidationError('Email already registered for this tenant');
+    }
+
+    const password_hash = await bcrypt.hash(password, 12);
+
+    const columnsResult = await db('information_schema.columns')
+      .where({ table_name: 'users' })
+      .select('column_name');
+    const columns = new Set(columnsResult.map((r: any) => r.column_name as string));
+    const hasIsActive = columns.has('is_active');
+
+    const row: Record<string, unknown> = {
+      email,
+      password_hash,
+      first_name,
+      last_name,
+      phone: phone || null,
+      role: 'receptionist',
+      tenant_id: tenantId,
+      is_email_verified: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+    if (hasIsActive) {
+      row.is_active = true;
+    }
+
+    const [user] = await db('users').insert(row).returning([
+      'id',
+      'email',
+      'first_name',
+      'last_name',
+      'phone',
+      'role',
+      'tenant_id',
+      'is_email_verified',
+      'created_at',
+    ]);
+
+    logger.info(`Staff user created: receptionist ${user.id}`);
+
+    res.status(201).json({
+      status: 'success',
+      message: 'User created successfully',
+      data: { user },
     });
   });
 
@@ -77,8 +163,7 @@ export class UserController {
 
     const user = await db('users')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
-      .select('id', 'email', 'first_name', 'last_name', 'phone', 'date_of_birth', 'gender', 'address', 'city', 'country', 'preferred_language', 'role', 'is_active', 'email_verified', 'last_login', 'created_at')
+      .select('id', 'email', 'first_name', 'last_name', 'phone', 'preferred_language', 'role', 'is_email_verified', 'last_login_at', 'created_at')
       .first();
 
     if (!user) {
@@ -118,12 +203,13 @@ export class UserController {
       city,
       country,
       preferred_language,
+      id_number,
+      zip_code,
     } = req.body;
 
     // Verify user exists
     const user = await db('users')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .first();
 
     if (!user) {
@@ -138,12 +224,24 @@ export class UserController {
     if (first_name) updateData.first_name = first_name;
     if (last_name) updateData.last_name = last_name;
     if (phone) updateData.phone = phone;
-    if (date_of_birth) updateData.date_of_birth = date_of_birth;
-    if (gender) updateData.gender = gender;
-    if (address) updateData.address = address;
-    if (city) updateData.city = city;
-    if (country) updateData.country = country;
     if (preferred_language) updateData.preferred_language = preferred_language;
+
+    const metadataUpdates: Record<string, any> = {};
+    if (date_of_birth) metadataUpdates.date_of_birth = date_of_birth;
+    if (gender) metadataUpdates.gender = gender;
+    if (address) metadataUpdates.address = address;
+    if (city) metadataUpdates.city = city;
+    if (country) metadataUpdates.country = country;
+    if (id_number) metadataUpdates.id_number = id_number;
+    if (zip_code) metadataUpdates.zip_code = zip_code;
+
+    if (Object.keys(metadataUpdates).length > 0) {
+      const existingMetadata = user.metadata ?? {};
+      updateData.metadata = {
+        ...existingMetadata,
+        ...metadataUpdates,
+      };
+    }
 
     const [updatedUser] = await db('users')
       .where({ id })
@@ -151,7 +249,12 @@ export class UserController {
       .returning('*');
 
     // Remove sensitive data
-    const { password_hash, email_verification_token, password_reset_token, ...userResponse } = updatedUser;
+    const {
+      password_hash: _password_hash,
+      email_verification_token: _email_verification_token,
+      password_reset_token: _password_reset_token,
+      ...userResponse
+    } = updatedUser;
 
     logger.info(`User updated: ${id}`);
 
@@ -175,7 +278,6 @@ export class UserController {
     // Verify user exists
     const user = await db('users')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .first();
 
     if (!user) {
@@ -185,10 +287,7 @@ export class UserController {
     // Soft delete
     await db('users')
       .where({ id })
-      .update({
-        deleted_at: new Date(),
-        updated_at: new Date(),
-      });
+      .delete();
 
     logger.info(`User deleted: ${id}`);
 
@@ -206,15 +305,20 @@ export class UserController {
     const { id } = req.params;
     const { role } = req.body;
     const tenantId = req.tenantId!;
+    const currentUserRole = req.user!.role;
 
     // Verify user exists
     const user = await db('users')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .first();
 
     if (!user) {
       throw new NotFoundError('User');
+    }
+
+    // Only developers can assign admin role
+    if (role === 'admin' && currentUserRole !== 'developer') {
+      throw new AuthorizationError('Only developers can assign admin role');
     }
 
     // Update role
@@ -240,13 +344,21 @@ export class UserController {
   updateUserStatus = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
     const { is_active } = req.body;
-    const tenantId = req.tenantId!;
+    const tenantId = req.tenantId;
 
-    // Verify user exists
+    // Verify user exists (check with or without tenant_id, as some users may not have tenant_id)
     const user = await db('users')
-      .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
+      .where({ id })
       .first();
+
+    // If tenant_id is provided, also verify it matches (for multi-tenant security)
+    if (tenantId && user && user.tenant_id !== tenantId) {
+      // Allow if current user is developer (can approve across tenants)
+      const currentUserRole = req.user?.role;
+      if (currentUserRole !== 'developer') {
+        throw new NotFoundError('User');
+      }
+    }
 
     if (!user) {
       throw new NotFoundError('User');
@@ -259,6 +371,36 @@ export class UserController {
         is_active,
         updated_at: new Date(),
       });
+
+    // If activating a doctor user, also activate doctor profile (if exists)
+    if (is_active === true && user.role === 'doctor') {
+      try {
+        const doctorUpdate: any = { is_active: true, updated_at: new Date() };
+        const doctorQuery = db('doctors').where({ user_id: id });
+        if (tenantId) {
+          doctorQuery.andWhere({ tenant_id: tenantId });
+        }
+        await doctorQuery.update(doctorUpdate);
+      } catch (e: any) {
+        logger.warn(`Failed to activate doctor profile for user ${id}: ${e?.message || e}`);
+      }
+    }
+
+    // Send approval email when activating (best-effort; email gate may block)
+    if (is_active === true) {
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: 'Your account has been approved',
+          template: 'account-approved',
+          data: {
+            name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+          },
+        });
+      } catch (e: any) {
+        logger.warn(`Failed to send account-approved email to ${user.email}: ${e?.message || e}`);
+      }
+    }
 
     logger.info(`User status updated: ${id} -> ${is_active ? 'active' : 'inactive'}`);
 
@@ -280,7 +422,6 @@ export class UserController {
     // Verify user exists
     const user = await db('users')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .first();
 
     if (!user) {

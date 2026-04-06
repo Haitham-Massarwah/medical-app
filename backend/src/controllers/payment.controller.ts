@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { PaymentService } from '../services/payment.service';
+import * as PaymentService from '../services/payment.service';
 import { logger } from '../config/logger';
 import { ApiError } from '../utils/apiError';
 
@@ -16,11 +16,14 @@ export class PaymentController {
    */
   public async createPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const tenantId = req.headers['x-tenant-id'] as string;
+      const tenantId = req.tenantId as string;
       const userId = req.user?.id;
       
       const { appointmentId, amount, currency = 'ILS', metadata } = req.body;
 
+      if (!tenantId) {
+        throw new ApiError(400, 'Tenant ID is required');
+      }
       if (!appointmentId || !amount) {
         throw new ApiError(400, 'Appointment ID and amount are required');
       }
@@ -54,7 +57,10 @@ export class PaymentController {
   public async processPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const tenantId = req.headers['x-tenant-id'] as string;
+      const tenantId = req.tenantId as string;
+      if (!tenantId) {
+        throw new ApiError(400, 'Tenant ID is required');
+      }
 
       const payment = await (this.paymentService as any).processPayment(id, tenantId);
 
@@ -77,9 +83,12 @@ export class PaymentController {
     try {
       const { id } = req.params;
       const { amount, reason } = req.body;
-      const tenantId = req.headers['x-tenant-id'] as string;
+      const tenantId = req.tenantId as string;
       const userId = req.user?.id;
 
+      if (!tenantId) {
+        throw new ApiError(400, 'Tenant ID is required');
+      }
       if (!reason) {
         throw new ApiError(400, 'Refund reason is required');
       }
@@ -110,7 +119,10 @@ export class PaymentController {
   public async getReceipt(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const tenantId = req.headers['x-tenant-id'] as string;
+      const tenantId = req.tenantId as string;
+      if (!tenantId) {
+        throw new ApiError(400, 'Tenant ID is required');
+      }
 
       const receipt = await (this.paymentService as any).generateReceipt(id, tenantId);
 
@@ -130,16 +142,23 @@ export class PaymentController {
    */
   public async getPaymentHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const tenantId = req.headers['x-tenant-id'] as string;
+      const tenantId = req.tenantId as string;
       const userId = req.user?.id;
       const role = req.user?.role;
 
       const { page = 1, limit = 20 } = req.query;
 
+      if (!tenantId) {
+        throw new ApiError(400, 'Tenant ID is required');
+      }
+      if (!userId || !role) {
+        throw new ApiError(401, 'Unauthorized');
+      }
+
       const result = await (this.paymentService as any).getPaymentHistory({
         tenantId,
-        userId: userId!,
-        role: role!,
+        userId,
+        role,
         page: Number(page),
         limit: Number(limit),
       });

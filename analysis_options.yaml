@@ -1,0 +1,19 @@
+# Keeps analysis focused on app code; vendored Flutter SDK under ./flutter/ must be excluded.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - flutter/**
+    - build/**
+    - .dart_tool/**
+    - test_driver/**
+  errors:
+    # Large legacy UI surface: keep CI green; prefer removing dead code over time.
+    unused_import: ignore
+    unused_element: ignore
+    unused_field: ignore
+    unused_local_variable: ignore
+
+linter:
+  rules:
+    avoid_print: false

@@ -75,19 +75,7 @@ class _CalendarBookingPageState extends State<CalendarBookingPage> {
       });
     } catch (e) {
       setState(() => _isLoadingDates = false);
-      
-      // Fallback: Generate mock available dates (next 30 days, skip weekends)
-      final mockDates = <DateTime>[];
-      for (int i = 1; i <= 30; i++) {
-        final date = DateTime.now().add(Duration(days: i));
-        // Skip Fridays (5) and Saturdays (6) for Israeli schedule
-        if (date.weekday != 5 && date.weekday != 6) {
-          if (date.month == _currentMonth.month) {
-            mockDates.add(date);
-          }
-        }
-      }
-      setState(() => _availableDates = mockDates);
+      setState(() => _availableDates = []);
     }
   }
 
@@ -106,13 +94,8 @@ class _CalendarBookingPageState extends State<CalendarBookingPage> {
       });
     } catch (e) {
       setState(() => _isLoadingSlots = false);
-      
-      // Fallback: Generate mock time slots
       setState(() {
-        _timeSlots = [
-          '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-          '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
-        ];
+        _timeSlots = [];
       });
     }
   }
@@ -170,13 +153,7 @@ class _CalendarBookingPageState extends State<CalendarBookingPage> {
         title: const Text('בחר אפשרות'),
         content: const Text('איך תרצה להמשיך?'),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _addToCart();
-            },
-            child: const Text('הוסף לעגלה'),
-          ),
+          // PD-09: Cart completely disabled - removed "Add to Cart" button entirely
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
@@ -189,17 +166,14 @@ class _CalendarBookingPageState extends State<CalendarBookingPage> {
     );
   }
 
+  // PD-09: Cart functionality disabled
   void _addToCart() {
-    // Add to cart and show success message
+    // Feature disabled - show "SOON" message
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('התור נוסף לעגלה'),
-        backgroundColor: Colors.green,
-        action: SnackBarAction(
-          label: 'צפה בעגלה',
-          textColor: Colors.white,
-          onPressed: () => Navigator.pushNamed(context, '/cart'),
-        ),
+      const SnackBar(
+        content: Text('עגלת התורים תהיה זמינה בקרוב'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
       ),
     );
   }

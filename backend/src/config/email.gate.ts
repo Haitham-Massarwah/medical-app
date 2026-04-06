@@ -10,6 +10,8 @@ export const ALLOWED_EMAIL_ADDRESSES: string[] = [
   // Developer account (always allowed)
   'haitham.massarwah@medical-appointments.com',
   'hn.medicalapoointments@gmail.com',
+  'haitham.massarwah@gmail.com',
+  'Haitham.Massarwah@gmail.com', // Doctor registration test email
   
   // Test accounts (add after creation)
   // 'test.doctor@medical-appointments.com',
@@ -33,10 +35,25 @@ export function canSendEmail(to: string): boolean {
     return false;
   }
   
-  // Allow emails to developer and test accounts only
-  return ALLOWED_EMAIL_ADDRESSES.some(
-    allowed => to.toLowerCase().includes(allowed.toLowerCase())
-  );
+  const normalizedTo = (to || '').toLowerCase().trim();
+
+  // Allow emails to explicitly allowed addresses
+  if (
+    ALLOWED_EMAIL_ADDRESSES.some(
+      allowed => normalizedTo === allowed.toLowerCase().trim()
+    )
+  ) {
+    return true;
+  }
+
+  // Allow emails to our product domain accounts (needed for self-registration verification flows)
+  // NOTE: Keep this list narrow; expand only if explicitly required.
+  const allowedDomains = ['medical-appointments.com'];
+  if (allowedDomains.some(domain => normalizedTo.endsWith(`@${domain}`))) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

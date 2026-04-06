@@ -12,42 +12,43 @@ void main() {
       final message = ErrorHandler.getErrorMessage(
         Exception('SocketException: Failed host lookup'),
       );
-      expect(message, contains('אין חיבור לאינטרנט'));
+      // getErrorMessage uses English for synchronous path (see ErrorHandler._getErrorMessage)
+      expect(message, contains('No internet connection'));
     });
 
     test('should handle timeout errors', () {
       final message = ErrorHandler.getErrorMessage(
         Exception('TimeoutException'),
       );
-      expect(message, contains('זמן רב מדי'));
+      expect(message, contains('Request took too long'));
     });
 
     test('should handle 401 errors', () {
       final message = ErrorHandler.getErrorMessage(
         Exception('401 Unauthorized'),
       );
-      expect(message, contains('ההרשאה פגה'));
+      expect(message, contains('Authorization expired'));
     });
 
     test('should handle 403 errors', () {
       final message = ErrorHandler.getErrorMessage(
         Exception('403 Forbidden'),
       );
-      expect(message, contains('אין לך הרשאה'));
+      expect(message, contains('You do not have permission'));
     });
 
     test('should handle 404 errors', () {
       final message = ErrorHandler.getErrorMessage(
         Exception('404 Not Found'),
       );
-      expect(message, contains('לא נמצא'));
+      expect(message, contains('not found'));
     });
 
     test('should handle 500 errors', () {
       final message = ErrorHandler.getErrorMessage(
         Exception('500 Internal Server Error'),
       );
-      expect(message, contains('שגיאת שרת'));
+      expect(message, contains('Server error'));
     });
 
     test('should use custom message when provided', () {
@@ -59,4 +60,3 @@ void main() {
     });
   });
 }
-

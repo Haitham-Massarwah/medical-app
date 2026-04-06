@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
+import '../widgets/dashboard_sidebar.dart';
+import '../../core/theme/app_colors.dart';
 
 class DeveloperPaymentsPage extends StatefulWidget {
   const DeveloperPaymentsPage({super.key});
@@ -21,6 +23,16 @@ class _DeveloperPaymentsPageState extends State<DeveloperPaymentsPage> {
   void initState() {
     super.initState();
     _loadPayments();
+    _setupRealTimeUpdates();
+  }
+
+  void _setupRealTimeUpdates() {
+    Future.delayed(const Duration(seconds: 30), () {
+      if (mounted) {
+        _loadPayments();
+        _setupRealTimeUpdates();
+      }
+    });
   }
 
   Future<void> _loadPayments() async {
@@ -66,51 +78,54 @@ class _DeveloperPaymentsPageState extends State<DeveloperPaymentsPage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('ניהול תשלומים'),
-          backgroundColor: Colors.purple.shade700,
-          foregroundColor: Colors.white,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadPayments,
-              tooltip: 'רענן',
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // Filters
-            _buildFilters(),
-            // Summary
-            _buildSummary(),
-            // Payments List
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _filteredPayments.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.payment, size: 64, color: Colors.grey),
-                              const SizedBox(height: 16),
-                              Text(
-                                'לא נמצאו תשלומים',
-                                style: TextStyle(fontSize: 18, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredPayments.length,
-                          itemBuilder: (context, index) {
-                            return _buildPaymentCard(_filteredPayments[index]);
-                          },
-                        ),
-            ),
-          ],
+        body: SafeArea(
+          child: Row(
+            children: [
+              // Sidebar
+              const DashboardSidebar(currentRoute: '/payments-list', role: 'developer'),
+              
+              // Main Content
+              Expanded(
+                child: Container(
+                  color: AppColors.backgroundLight,
+                  child: Column(
+                    children: [
+                      // Filters
+                      _buildFilters(),
+                      // Summary
+                      _buildSummary(),
+                      // Payments List
+                      Expanded(
+                        child: _isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : _filteredPayments.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.payment, size: 64, color: Colors.grey),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          'לא נמצאו תשלומים',
+                                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.all(16),
+                                    itemCount: _filteredPayments.length,
+                                    itemBuilder: (context, index) {
+                                      return _buildPaymentCard(_filteredPayments[index]);
+                                    },
+                                  ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

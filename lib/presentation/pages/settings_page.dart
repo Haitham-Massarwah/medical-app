@@ -24,6 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _pushNotifications = true;
   bool _isLoading = true;
   String _currentLanguage = 'עברית';
+  String? _userRole; // Store user role to filter settings
 
   @override
   void initState() {
@@ -39,8 +40,13 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       // Load current language
       final currentLang = await LanguageService.getCurrentLanguage();
+      // Load user role
+      final user = await _authService.getCurrentUser();
+      final role = user['data']?['user']?['role'] ?? 'patient';
+      
       setState(() {
         _currentLanguage = currentLang;
+        _userRole = role;
         _isLoading = false;
       });
     } catch (e) {
@@ -86,7 +92,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
                           const SizedBox(height: 32),
 
-                          // Notifications Section
+                          // Notifications Section - DISABLED (using email for now)
+                          // Commented out per requirement #10
+                          /*
                           const Text(
                             'התראות',
                             style: TextStyle(
@@ -141,6 +149,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
 
                           const SizedBox(height: 32),
+                          */
+
+                          const SizedBox(height: 32),
 
                           // Account Section
                           const Text(
@@ -152,16 +163,31 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                           const SizedBox(height: 16),
 
-                          ListTile(
-                            leading: const Icon(Icons.person),
-                            title: const Text('פרופיל מפתח'),
-                            subtitle: const Text('הגדרות פרופיל המפתח'),
-                            trailing:
-                                const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              _showDeveloperProfile();
-                            },
-                          ),
+                          // Only show Developer Profile for Developer/Admin roles
+                          if (_userRole == 'developer' || _userRole == 'admin')
+                            ListTile(
+                              leading: const Icon(Icons.person),
+                              title: const Text('פרופיל מפתח'),
+                              subtitle: const Text('הגדרות פרופיל המפתח'),
+                              trailing:
+                                  const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () {
+                                _showDeveloperProfile();
+                              },
+                            ),
+
+                          // Show Personal Information for Patient/Doctor
+                          if (_userRole == 'patient' || _userRole == 'doctor')
+                            ListTile(
+                              leading: const Icon(Icons.person),
+                              title: const Text('מידע אישי'),
+                              subtitle: const Text('הצג וערוך את המידע האישי שלך'),
+                              trailing:
+                                  const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () {
+                                Navigator.pushNamed(context, '/profile');
+                              },
+                            ),
 
                           ListTile(
                             leading: const Icon(Icons.security),
@@ -262,8 +288,8 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               ListTile(
                 leading: const Icon(Icons.calendar_today, color: Colors.red),
-                title: const Text('Google Calendar'),
-                subtitle: const Text('חיבור ל-Google Calendar'),
+                title: const Text('יומן Google'),
+                subtitle: const Text('חיבור ליומן Google'),
                 onTap: () {
                   Navigator.pop(context);
                   _connectGoogleCalendar();
@@ -271,8 +297,8 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.calendar_month, color: Colors.blue),
-                title: const Text('Outlook Calendar'),
-                subtitle: const Text('חיבור ל-Outlook Calendar'),
+                title: const Text('יומן Outlook'),
+                subtitle: const Text('חיבור ליומן Outlook'),
                 onTap: () {
                   Navigator.pop(context);
                   _connectOutlookCalendar();
@@ -567,7 +593,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   },
                 ),
                 RadioListTile<String>(
-                  title: const Text('English'),
+                  title: const Text('אנגלית'),
                   value: 'English',
                   groupValue: _currentLanguage,
                   onChanged: (value) {

@@ -4,10 +4,16 @@ import { CorsOptions } from 'cors';
 const defaultOrigins = [
   'http://localhost:3000',
   'http://localhost:8080',
+  'http://localhost:8081', // Flutter web app port
   'http://localhost:5000',
   'http://localhost:3001',
+  'http://localhost:6061',
+  'http://localhost:6062',
+  'http://localhost:8765',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:8080',
+  'http://127.0.0.1:8081', // Flutter web app port
+  'http://127.0.0.1:8765',
 ];
 
 // Parse allowed origins from environment

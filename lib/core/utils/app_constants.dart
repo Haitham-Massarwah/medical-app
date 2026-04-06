@@ -19,9 +19,32 @@ class AppConstants {
   static const String roleDoctor = 'doctor';
   static const String roleParamedical = 'paramedical';
   static const String rolePatient = 'patient';
+  static const String roleReceptionist = 'receptionist';
   
-  // Medical Specialties
+  // Medical and Paramedical Specialties
   static const List<String> medicalSpecialties = [
+    // Medical Specialties
+    'general_practitioner',
+    'cardiologist',
+    'neurologist',
+    'orthopedist',
+    'dermatologist',
+    'gynecologist',
+    'pediatrician',
+    'psychiatrist',
+    'ophthalmologist',
+    'otolaryngologist',
+    'urologist',
+    'gastroenterologist',
+    'endocrinologist',
+    'pulmonologist',
+    'rheumatologist',
+    'oncologist',
+    'anesthesiologist',
+    'surgeon',
+    'internal_medicine',
+    'emergency_medicine',
+    // Paramedical Specialties
     'osteopath',
     'physiotherapist',
     'dentist',
@@ -30,8 +53,17 @@ class AppConstants {
     'acupuncturist',
     'psychologist',
     'nutritionist',
-    'general_practitioner',
-    'specialist',
+    'speech_therapist',
+    'occupational_therapist',
+    'chiropractor',
+    'naturopath',
+    'homeopath',
+    'podiatrist',
+    'optometrist',
+    'audiologist',
+    'radiologist_technician',
+    'medical_laboratory_technician',
+    'pharmacy_technician',
   ];
   
   // Appointment Status
@@ -94,20 +126,20 @@ class AppConstants {
   static const Duration longAnimation = Duration(milliseconds: 500);
   
   // Error Messages
-  static const String errorNetworkConnection = 'Network connection error';
-  static const String errorServerError = 'Server error occurred';
-  static const String errorUnauthorized = 'Unauthorized access';
-  static const String errorForbidden = 'Access forbidden';
-  static const String errorNotFound = 'Resource not found';
-  static const String errorValidation = 'Validation error';
-  static const String errorUnknown = 'Unknown error occurred';
+  static const String errorNetworkConnection = 'שגיאת חיבור רשת';
+  static const String errorServerError = 'אירעה שגיאת שרת';
+  static const String errorUnauthorized = 'גישה לא מורשית';
+  static const String errorForbidden = 'גישה אסורה';
+  static const String errorNotFound = 'המשאב לא נמצא';
+  static const String errorValidation = 'שגיאת אימות';
+  static const String errorUnknown = 'אירעה שגיאה לא ידועה';
   
   // Success Messages
-  static const String successAppointmentBooked = 'Appointment booked successfully';
-  static const String successAppointmentCancelled = 'Appointment cancelled successfully';
-  static const String successAppointmentRescheduled = 'Appointment rescheduled successfully';
-  static const String successPaymentCompleted = 'Payment completed successfully';
-  static const String successProfileUpdated = 'Profile updated successfully';
+  static const String successAppointmentBooked = 'התור נקבע בהצלחה';
+  static const String successAppointmentCancelled = 'התור בוטל בהצלחה';
+  static const String successAppointmentRescheduled = 'התור נדחה בהצלחה';
+  static const String successPaymentCompleted = 'התשלום הושלם בהצלחה';
+  static const String successProfileUpdated = 'הפרופיל עודכן בהצלחה';
   
   // Israeli Holidays (for calendar integration)
   static const List<String> israeliHolidays = [

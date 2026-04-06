@@ -1,6 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
 import { logger } from '../config/logger';
-import db from '../config/database';
 
 /**
  * Cardcom Payment Service
@@ -52,7 +51,7 @@ interface CardcomRefundRequest {
   Reason?: string;
 }
 
-class CardcomService {
+export class CardcomService {
   private config: CardcomConfig;
   private axiosInstance: AxiosInstance;
 

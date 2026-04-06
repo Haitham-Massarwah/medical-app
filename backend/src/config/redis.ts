@@ -23,7 +23,7 @@ class RedisClient {
         database: parseInt(process.env.REDIS_DB || '0'),
       });
 
-      this.client.on('error', (err) => {
+      this.client.on('error', (_err) => {
         if (this.isConnected) {
           logger.warn('⚠️  Redis connection error - continuing without cache');
         }

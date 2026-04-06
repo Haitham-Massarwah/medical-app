@@ -29,8 +29,7 @@ class _DoctorTreatmentSettingsPageState extends State<DoctorTreatmentSettingsPag
       description: 'ייעוץ רפואי כללי',
       duration: Duration(minutes: 30),
       price: 200.0,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      isActive: true,
     ),
     const TreatmentTypeModel(
       id: '2',
@@ -38,8 +37,7 @@ class _DoctorTreatmentSettingsPageState extends State<DoctorTreatmentSettingsPag
       description: 'בדיקה גופנית מקיפה',
       duration: Duration(minutes: 45),
       price: 300.0,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      isActive: true,
     ),
     const TreatmentTypeModel(
       id: '3',
@@ -47,8 +45,7 @@ class _DoctorTreatmentSettingsPageState extends State<DoctorTreatmentSettingsPag
       description: 'ייעוץ עם מומחה',
       duration: Duration(minutes: 60),
       price: 400.0,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      isActive: true,
     ),
   ];
 
@@ -345,7 +342,7 @@ class _DoctorTreatmentSettingsPageState extends State<DoctorTreatmentSettingsPag
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     title: Text('${_formatTime(breakPeriod.startTime)} - ${_formatTime(breakPeriod.endTime)}'),
-                    subtitle: Text(breakPeriod.reason),
+                    subtitle: Text(breakPeriod.name),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
                       onPressed: () {
@@ -618,10 +615,11 @@ class _BreakPeriodDialogState extends State<_BreakPeriodDialog> {
 
     final breakPeriod = BreakPeriodModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      doctorId: 'current_doctor_id', // Would come from auth
+      name: _reasonController.text,
       startTime: startDateTime,
       endTime: endDateTime,
-      reason: _reasonController.text,
+      daysOfWeek: const [0, 1, 2, 3, 4, 5, 6],
+      isRecurring: true,
     );
 
     widget.onSave(breakPeriod);

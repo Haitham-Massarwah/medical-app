@@ -34,6 +34,31 @@ router.get(
 );
 
 /**
+ * @route   POST /api/v1/notifications/sms
+ * @desc    Send SMS directly
+ * @access  Private
+ */
+router.post(
+  '/sms',
+  validateRequest([
+    body('to').notEmpty().withMessage('Phone number is required'),
+    body('message').notEmpty().withMessage('Message is required'),
+    body('type').optional().isString(),
+  ]),
+  notificationController.sendSMS
+);
+
+/**
+ * @route   GET /api/v1/notifications/sms/status
+ * @desc    Check SMS service status
+ * @access  Private
+ */
+router.get(
+  '/sms/status',
+  notificationController.getSMSStatus
+);
+
+/**
  * @route   GET /api/v1/notifications/:id
  * @desc    Get notification by ID
  * @access  Private

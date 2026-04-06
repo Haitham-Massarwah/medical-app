@@ -308,7 +308,7 @@ class _SystemSettingsPageState extends State<SystemSettingsPage> {
               },
             ),
             ListTile(
-              title: const Text('English'),
+              title: const Text('אנגלית'),
               onTap: () {
                 setState(() {
                   _selectedLanguage = 'English';

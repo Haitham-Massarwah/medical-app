@@ -25,8 +25,6 @@ class _LocationSearchPageState extends State<LocationSearchPage> {
       country: 'ישראל',
       latitude: 32.0853,
       longitude: 34.7818,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
     ),
     const LocationModel(
       id: '2',
@@ -36,8 +34,6 @@ class _LocationSearchPageState extends State<LocationSearchPage> {
       country: 'ישראל',
       latitude: 31.7683,
       longitude: 35.2137,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
     ),
     const LocationModel(
       id: '3',
@@ -47,8 +43,6 @@ class _LocationSearchPageState extends State<LocationSearchPage> {
       country: 'ישראל',
       latitude: 32.7940,
       longitude: 34.9896,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
     ),
   ];
 

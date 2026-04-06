@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import '../../services/secure_visa_service.dart';
 import '../../services/validation_service.dart';
+import '../../services/doctor_service.dart';
+import '../../services/user_service.dart';
 
 class DoctorProfilePage extends StatefulWidget {
   const DoctorProfilePage({super.key});
@@ -13,6 +15,10 @@ class DoctorProfilePage extends StatefulWidget {
 
 class _DoctorProfilePageState extends State<DoctorProfilePage> {
   final _formKey = GlobalKey<FormState>();
+  final DoctorService _doctorService = DoctorService();
+  final UserService _userService = UserService();
+  String? _doctorId;
+  String? _userId;
   // Form validation state
   bool _isPersonalInfoValid = true;
   bool _isContactInfoValid = true;
@@ -77,43 +83,97 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
   void initState() {
     super.initState();
     _loadDoctorData();
-    _initializeWorkingHours();
   }
 
-  void _loadDoctorData() {
-    // Mock data - in real app, this would come from database
-    _firstNameController.text = 'ד"ר יוסי';
-    _lastNameController.text = 'כהן';
-    _emailController.text = 'doctor@medicalapp.com';
-    _phoneController.text = '050-1234567';
-    _idNumberController.text = '123456789';
-    _specialtyController.text = 'רפואה פנימית';
-    _experienceController.text = '15';
-    _addressController.text = 'רחוב הרצל 123';
-    _cityController.text = 'תל אביב';
-    _zipCodeController.text = '12345';
-    _bioController.text = 'רופא מומחה ברפואה פנימית עם ניסיון של 15 שנים';
-    _educationController.text = 'אוניברסיטת תל אביב - רפואה';
-    _certificationsController.text = 'מומחה ברפואה פנימית, מומחה בקרדיולוגיה';
-    _languagesController.text = 'עברית, אנגלית, ערבית';
+  Future<void> _loadDoctorData() async {
+    setState(() {
+      _isLoading = true;
+    });
 
-    // Visa information (pre-filled by developer)
-    _visaNumberController.text = '1234 5678 9012 3456';
-    _visaExpiryController.text = '12/25';
-    _cvvController.text = '123';
-    _cardholderNameController.text = 'ד"ר יוסי כהן';
+    try {
+      final doctor = await _doctorService.getMyDoctorProfile();
+      _doctorId = doctor['id']?.toString();
+      _userId = doctor['user_id']?.toString();
+
+      _firstNameController.text = doctor['first_name']?.toString() ?? '';
+      _lastNameController.text = doctor['last_name']?.toString() ?? '';
+      _emailController.text = doctor['email']?.toString() ?? '';
+      _phoneController.text = doctor['phone']?.toString() ?? '';
+      _specialtyController.text = doctor['specialty']?.toString() ?? '';
+      _bioController.text = doctor['bio']?.toString() ?? '';
+      _educationController.text = doctor['education']?.toString() ?? '';
+      _languagesController.text = _joinListValues(doctor['languages']);
+
+      final currentUser = await _userService.getCurrentUser();
+      _userId = currentUser['id']?.toString() ?? _userId;
+      final metadata = Map<String, dynamic>.from(currentUser['metadata'] ?? {});
+      _idNumberController.text = metadata['id_number']?.toString() ?? '';
+      _addressController.text = metadata['address']?.toString() ?? '';
+      _cityController.text = metadata['city']?.toString() ?? '';
+      _zipCodeController.text = metadata['zip_code']?.toString() ?? '';
+
+      if (_doctorId != null) {
+        await _loadWorkingHours(_doctorId!);
+      }
+
+      _visaNumberController.text = '';
+      _visaExpiryController.text = '';
+      _cvvController.text = '';
+      _cardholderNameController.text = '';
+    } catch (e) {
+      _showError('שגיאה בטעינת נתוני הרופא: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
-  void _initializeWorkingHours() {
-    for (String day in _daysOfWeek) {
-      _workingHours[day] = {
-        'start': '09:00',
-        'end': '17:00',
-        'breakStart': '13:00',
-        'breakEnd': '14:00',
+  Future<void> _loadWorkingHours(String doctorId) async {
+    final availability = await _doctorService.getDoctorAvailability(
+      doctorId,
+      DateTime.now(),
+    );
+    final workingHours = availability['working_hours'];
+    if (workingHours is! List) {
+      setState(() {
+        _workingHours = {};
+        _selectedDays = [];
+      });
+      return;
+    }
+
+    final updatedHours = <String, Map<String, String>>{};
+    final selectedDays = <String>[];
+    for (final slot in workingHours) {
+      if (slot is! Map<String, dynamic>) continue;
+      final dayIndex = slot['day_of_week'];
+      if (dayIndex is! int || dayIndex < 0 || dayIndex >= _daysOfWeek.length) {
+        continue;
+      }
+      final dayName = _daysOfWeek[dayIndex];
+      selectedDays.add(dayName);
+      updatedHours[dayName] = {
+        'start': slot['start_time']?.toString() ?? '',
+        'end': slot['end_time']?.toString() ?? '',
+        'breakStart': '',
+        'breakEnd': '',
       };
     }
-    _selectedDays = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי'];
+
+    setState(() {
+      _workingHours = updatedHours;
+      _selectedDays = selectedDays;
+    });
+  }
+
+  String _joinListValues(dynamic value) {
+    if (value is List) {
+      return value.map((item) => item.toString()).join(', ');
+    }
+    return value?.toString() ?? '';
   }
 
   // Validation methods for each section
@@ -179,6 +239,138 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
         return _isEditingVisaInfo && _isVisaInfoValid;
       default:
         return false;
+    }
+  }
+
+  Future<void> _savePersonalInfo() async {
+    if (_userId == null) {
+      _showError('משתמש לא נמצא לשמירה');
+      return;
+    }
+    try {
+      await _userService.updateUser(
+        userId: _userId!,
+        data: {
+          'first_name': _firstNameController.text.trim(),
+          'last_name': _lastNameController.text.trim(),
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _isEditingPersonalInfo = false;
+        });
+      }
+      _showSuccess('מידע אישי נשמר בהצלחה');
+    } catch (e) {
+      _showError('שגיאה בשמירת מידע אישי: $e');
+    }
+  }
+
+  Future<void> _saveContactInfo() async {
+    if (_userId == null) {
+      _showError('משתמש לא נמצא לשמירה');
+      return;
+    }
+    try {
+      await _userService.updateUser(
+        userId: _userId!,
+        data: {
+          'phone': _phoneController.text.trim(),
+          'id_number': _idNumberController.text.trim(),
+          'address': _addressController.text.trim(),
+          'city': _cityController.text.trim(),
+          'zip_code': _zipCodeController.text.trim(),
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _isEditingContactInfo = false;
+        });
+      }
+      _showSuccess('פרטי התקשרות נשמרו בהצלחה');
+    } catch (e) {
+      _showError('שגיאה בשמירת פרטי התקשרות: $e');
+    }
+  }
+
+  Future<void> _saveSpecialtyInfo() async {
+    if (_doctorId == null) {
+      _showError('פרופיל רופא לא נמצא לשמירה');
+      return;
+    }
+    try {
+      await _doctorService.updateDoctor(_doctorId!, {
+        'specialty': _specialtyController.text.trim(),
+      });
+      if (mounted) {
+        setState(() {
+          _isEditingSpecialtyInfo = false;
+        });
+      }
+      _showSuccess('מידע מקצועי נשמר בהצלחה');
+    } catch (e) {
+      _showError('שגיאה בשמירת מידע מקצועי: $e');
+    }
+  }
+
+  Future<void> _saveAdditionalInfo() async {
+    if (_doctorId == null) {
+      _showError('פרופיל רופא לא נמצא לשמירה');
+      return;
+    }
+    try {
+      final languages = _languagesController.text
+          .split(',')
+          .map((lang) => lang.trim())
+          .where((lang) => lang.isNotEmpty)
+          .toList();
+
+      await _doctorService.updateDoctor(_doctorId!, {
+        if (_educationController.text.trim().isNotEmpty)
+          'education': _educationController.text.trim(),
+        if (languages.isNotEmpty) 'languages': languages,
+      });
+      if (mounted) {
+        setState(() {
+          _isEditingAdditionalInfo = false;
+        });
+      }
+      _showSuccess('מידע נוסף נשמר בהצלחה');
+    } catch (e) {
+      _showError('שגיאה בשמירת מידע נוסף: $e');
+    }
+  }
+
+  Future<void> _saveWorkingHours() async {
+    if (_doctorId == null) {
+      _showError('פרופיל רופא לא נמצא לשמירה');
+      return;
+    }
+    try {
+      final workingHours = <Map<String, dynamic>>[];
+      for (final day in _selectedDays) {
+        final dayIndex = _daysOfWeek.indexOf(day);
+        if (dayIndex == -1) continue;
+        final values = _workingHours[day];
+        final start = values?['start'] ?? '';
+        final end = values?['end'] ?? '';
+        if (start.isEmpty || end.isEmpty) continue;
+        workingHours.add({
+          'day_of_week': dayIndex,
+          'start_time': start,
+          'end_time': end,
+        });
+      }
+
+      await _doctorService.updateSchedule(_doctorId!, workingHours);
+      if (mounted) {
+        setState(() {
+          _isEditingWorkingHours = false;
+        });
+      }
+      _showSuccess('שעות עבודה נשמרו בהצלחה');
+    } catch (e) {
+      _showError('שגיאה בשמירת שעות עבודה: $e');
     }
   }
 
@@ -311,16 +503,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                 ElevatedButton.icon(
                   onPressed: _isEditingPersonalInfo
                       ? (_canSaveSection('personal')
-                          ? () {
-                              setState(() {
-                                _isEditingPersonalInfo = false;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('מידע אישי נשמר בהצלחה'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                          ? () async {
+                              await _savePersonalInfo();
                             }
                           : null)
                       : () {
@@ -413,16 +597,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                 ElevatedButton.icon(
                   onPressed: _isEditingSpecialtyInfo
                       ? (_canSaveSection('specialty')
-                          ? () {
-                              setState(() {
-                                _isEditingSpecialtyInfo = false;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('מידע מקצועי נשמר בהצלחה'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                          ? () async {
+                              await _saveSpecialtyInfo();
                             }
                           : null)
                       : () {
@@ -481,16 +657,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                 ElevatedButton.icon(
                   onPressed: _isEditingContactInfo
                       ? (_canSaveSection('contact')
-                          ? () {
-                              setState(() {
-                                _isEditingContactInfo = false;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('פרטי התקשרות נשמרו בהצלחה'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                          ? () async {
+                              await _saveContactInfo();
                             }
                           : null)
                       : () {
@@ -705,7 +873,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
               Text(
                 _isEditingVisaInfo
                     ? 'עריכת פרטי הכרטיס'
-                    : 'פרטים אלה מולאו על ידי המפתח',
+                    : 'פרטים מוצגים לאחר אימות',
                 style: TextStyle(
                     fontSize: 12,
                     color: _isEditingVisaInfo ? Colors.blue : Colors.grey),
@@ -1083,10 +1251,14 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                 ),
                 const Spacer(),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _isEditingWorkingHours = !_isEditingWorkingHours;
-                    });
+                  onPressed: () async {
+                    if (_isEditingWorkingHours) {
+                      await _saveWorkingHours();
+                    } else {
+                      setState(() {
+                        _isEditingWorkingHours = true;
+                      });
+                    }
                   },
                   icon: Icon(_isEditingWorkingHours ? Icons.save : Icons.edit),
                   label: Text(_isEditingWorkingHours ? 'שמור' : 'עריכה'),
@@ -1281,16 +1453,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                 ElevatedButton.icon(
                   onPressed: _isEditingAdditionalInfo
                       ? (_canSaveSection('additional')
-                          ? () {
-                              setState(() {
-                                _isEditingAdditionalInfo = false;
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('מידע נוסף נשמר בהצלחה'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                          ? () async {
+                              await _saveAdditionalInfo();
                             }
                           : null)
                       : () {
@@ -1380,6 +1544,26 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
   }
 
   // Section-based editing methods removed - each section handles its own editing
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
 
   @override
   void dispose() {

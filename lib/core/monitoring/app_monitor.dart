@@ -4,12 +4,30 @@ import '../config/app_config.dart';
 
 /// Application monitoring and logging
 class AppMonitor {
-  static final Logger _logger = AppConfig.logger;
+  static Logger? _logger;
+  static Logger get logger {
+    _logger ??= Logger(
+      printer: PrettyPrinter(
+        methodCount: 2,
+        errorMethodCount: 8,
+        lineLength: 120,
+        colors: true,
+        printEmojis: true,
+        printTime: true,
+      ),
+    );
+    return _logger!;
+  }
   static final List<Map<String, dynamic>> _events = [];
   static const int _maxEvents = 1000;
 
   /// Log application event
-  static void logEvent(String event, {Map<String, dynamic>? data}) {
+  /// Set [silent] to skip console output (e.g. bulk tests for event cap).
+  static void logEvent(
+    String event, {
+    Map<String, dynamic>? data,
+    bool silent = false,
+  }) {
     final eventData = {
       'timestamp': DateTime.now().toIso8601String(),
       'event': event,
@@ -23,7 +41,9 @@ class AppMonitor {
       _events.removeAt(0);
     }
 
-    _logger.i('Event: $event', error: null, stackTrace: null);
+    if (!silent) {
+      logger.i('Event: $event', error: null, stackTrace: null);
+    }
   }
 
   /// Log error with context
@@ -45,7 +65,7 @@ class AppMonitor {
       ...errorData,
     });
 
-    _logger.e(
+    logger.e(
       message,
       error: error,
       stackTrace: stackTrace,
@@ -59,7 +79,7 @@ class AppMonitor {
 
   /// Log performance metric
   static void logPerformance(String operation, Duration duration) {
-    _logger.d('Performance: $operation took ${duration.inMilliseconds}ms');
+    logger.d('Performance: $operation took ${duration.inMilliseconds}ms');
 
     _events.add({
       'type': 'performance',
@@ -109,7 +129,7 @@ class AppMonitor {
   /// Clear events
   static void clearEvents() {
     _events.clear();
-    _logger.i('Events cleared');
+    logger.i('Events cleared');
   }
 
   /// Send error to monitoring service (Sentry, LogRocket, etc.)
@@ -125,7 +145,9 @@ class AppMonitor {
 
   /// Initialize monitoring
   static void initialize() {
-    _logger.i('App monitoring initialized');
+    // Ensure logger is initialized
+    _logger = AppConfig.logger;
+    logger.i('App monitoring initialized');
     logEvent('app_started', data: {
       'version': '1.0.0',
       'platform': defaultTargetPlatform.toString(),

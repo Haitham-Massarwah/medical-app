@@ -7,7 +7,7 @@ const config: Knex.Config = {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || '',
+    password: process.env.DB_PASSWORD ? String(process.env.DB_PASSWORD).trim() : '',
     database: process.env.DB_NAME || 'medical_appointments',
   },
   pool: {
@@ -27,14 +27,19 @@ const config: Knex.Config = {
 
 const db = knex(config);
 
-// Test database connection
-db.raw('SELECT 1')
-  .then(() => {
-    logger.info('✅ Database connected successfully');
-  })
-  .catch((err) => {
-    logger.error('❌ Database connection failed:', err);
-    process.exit(1);
-  });
+// Test database connection (only in non-test environment)
+if (process.env.NODE_ENV !== 'test' && !process.env.SKIP_DB_CONNECTION_CHECK) {
+  db.raw('SELECT 1')
+    .then(() => {
+      logger.info('✅ Database connected successfully');
+    })
+    .catch((err) => {
+      logger.error('❌ Database connection failed:', err);
+      // Don't exit in development, allow app to start
+      if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+      }
+    });
+}
 
 export default db;

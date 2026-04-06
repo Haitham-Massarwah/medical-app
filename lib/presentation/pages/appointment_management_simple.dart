@@ -8,35 +8,8 @@ class AppointmentManagementPage extends StatefulWidget {
 }
 
 class _AppointmentManagementPageState extends State<AppointmentManagementPage> {
-  final List<Map<String, dynamic>> _appointments = [
-    {
-      'id': '1',
-      'patientName': 'יוסי כהן',
-      'date': '2024-01-16',
-      'time': '10:00',
-      'treatment': 'בדיקה כללית',
-      'status': 'ממתין',
-      'phone': '050-1234567',
-    },
-    {
-      'id': '2',
-      'patientName': 'שרה לוי',
-      'date': '2024-01-16',
-      'time': '11:30',
-      'treatment': 'ייעוץ',
-      'status': 'מאושר',
-      'phone': '052-9876543',
-    },
-    {
-      'id': '3',
-      'patientName': 'דוד ישראלי',
-      'date': '2024-01-17',
-      'time': '09:00',
-      'treatment': 'טיפול',
-      'status': 'בוטל',
-      'phone': '053-5555555',
-    },
-  ];
+  // Appointment data will be loaded from API; start empty to avoid placeholders
+  final List<Map<String, dynamic>> _appointments = [];
 
   String _selectedFilter = 'כל התורים';
 

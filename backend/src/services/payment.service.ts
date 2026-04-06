@@ -9,6 +9,30 @@ import db from '../config/database';
 
 let stripeClient: Stripe | null = null;
 
+async function hasPaymentsTable(): Promise<boolean> {
+  try {
+    return await db.schema.hasTable('payments');
+  } catch (e) {
+    logger.warn('Failed to check payments table existence; defaulting to missing payments table.', e as any);
+    return false;
+  }
+}
+
+export type PaymentHistoryParams = {
+  tenantId: string;
+  userId: string;
+  role: string;
+  page: number;
+  limit: number;
+};
+
+export type PaymentHistoryResult = {
+  data: any[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
 /**
  * Initialize Stripe client
  */
@@ -179,6 +203,47 @@ export const createCustomer = async (
     logger.error('Failed to create Stripe customer:', error.message);
     throw new Error(`Customer creation failed: ${error.message}`);
   }
+};
+
+/**
+ * Get payment history (read-only)
+ * Returns empty set when payments are not configured or payments table does not exist.
+ */
+export const getPaymentHistory = async (params: PaymentHistoryParams): Promise<PaymentHistoryResult> => {
+  const page = Number(params.page || 1);
+  const limit = Math.min(100, Math.max(1, Number(params.limit || 20)));
+  const offset = (page - 1) * limit;
+
+  // If DB doesn't have the payments table, treat as "payments not active" rather than erroring.
+  if (!(await hasPaymentsTable())) {
+    return { data: [], page, limit, total: 0 };
+  }
+
+  // Payments can still exist in DB even if Stripe isn't configured; but if no Stripe key, we consider it inactive.
+  // For readiness checks, returning DB history is acceptable, but we never attempt live Stripe calls here.
+  const tenantId = params.tenantId;
+
+  let query = db('payments').where({ tenant_id: tenantId });
+
+  // Role scoping: patient sees their own; others (admin/developer/doctor) can see all for tenant.
+  if (params.role === 'patient') {
+    query = query.andWhere({ patient_id: params.userId });
+  }
+
+  const [{ count }] = await query.clone().count('* as count');
+
+  const rows = await query
+    .select('*')
+    .orderBy('created_at', 'desc')
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    data: rows,
+    page,
+    limit,
+    total: Number(count || 0),
+  };
 };
 
 /**

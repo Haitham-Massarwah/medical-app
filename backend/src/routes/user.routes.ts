@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body, param } from 'express-validator';
+import { body } from 'express-validator';
 import { UserController } from '../controllers/user.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validateRequest, validatePagination, validateUUID } from '../middleware/validator';
@@ -22,6 +22,25 @@ router.get(
   authorize('admin', 'developer'),
   validatePagination,
   userController.getAllUsers
+);
+
+/**
+ * @route   POST /api/v1/users
+ * @desc    Create staff user (receptionist)
+ * @access  Private/Admin/Developer
+ */
+router.post(
+  '/',
+  authorize('admin', 'developer'),
+  validateRequest([
+    body('email').isEmail().normalizeEmail(),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    body('first_name').trim().notEmpty(),
+    body('last_name').trim().notEmpty(),
+    body('phone').optional().isMobilePhone('any'),
+    body('role').equals('receptionist').withMessage('role must be receptionist'),
+  ]),
+  userController.createStaffUser
 );
 
 /**
@@ -53,6 +72,8 @@ router.put(
     body('address').optional().trim(),
     body('city').optional().trim(),
     body('country').optional().trim(),
+    body('id_number').optional().trim(),
+    body('zip_code').optional().trim(),
     body('preferred_language').optional().isIn(['en', 'he', 'ar']),
   ]),
   userController.updateUser
@@ -80,7 +101,9 @@ router.put(
   authorize('admin', 'developer'),
   validateUUID('id'),
   validateRequest([
-    body('role').isIn(['patient', 'doctor', 'admin', 'developer']).withMessage('Invalid role'),
+    body('role')
+      .isIn(['patient', 'doctor', 'admin', 'developer', 'receptionist'])
+      .withMessage('Invalid role'),
   ]),
   userController.updateUserRole
 );

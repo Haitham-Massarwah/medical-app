@@ -30,82 +30,44 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
   Future<void> _loadAppointments() async {
     setState(() => _isLoading = true);
     try {
-      final response = await _apiService.get('/appointments/all');
+      // Use admin database endpoint which has proper joins for doctor/patient names
+      final response = await _apiService.get('/admin/database/appointments?page=1&limit=100');
       if (response['success'] == true) {
+        final List<dynamic> rawAppointments = response['data'] ?? [];
         setState(() {
-          _appointments = List<Map<String, dynamic>>.from(response['data'] ?? []);
+          _appointments = rawAppointments.map((apt) {
+            final map = apt as Map<String, dynamic>;
+            // Map fields from admin endpoint response
+            return {
+              'id': map['id'] ?? '',
+              'appointment_date': map['appointment_date'] ?? '',
+              'status': map['status'] ?? 'pending',
+              'location': map['location'] ?? '',
+              'notes': map['notes'] ?? '',
+              'doctorName': map['doctor_name'] ?? 'רופא לא ידוע',
+              'patientName': map['patient_name'] ?? 'מטופל לא ידוע',
+              'specialty': map['specialty'] ?? '',
+              'duration_minutes': map['duration_minutes'] ?? 30,
+            };
+          }).toList();
           _isLoading = false;
         });
       } else {
-        throw Exception(response['message']);
+        throw Exception(response['message'] ?? 'Failed to load appointments');
       }
     } catch (e) {
-      // Show sample data if API fails
+      // Do not fall back to sample data; show empty state with an alert.
       setState(() {
-        _appointments = [
-          {
-            'id': '1',
-            'doctorName': 'ד"ר אברהם כהן',
-            'patientName': 'לקוח ישראלי',
-            'specialty': 'רופא משפחה',
-            'date': '2024-01-15',
-            'time': '09:00',
-            'status': 'confirmed',
-            'location': 'תל אביב',
-            'address': 'תל אביב, רחוב רוטשילד 23',
-          },
-          {
-            'id': '2',
-            'doctorName': 'ד"ר שרה לוי',
-            'patientName': 'שרה כהן',
-            'specialty': 'קרדיולוג',
-            'date': '2024-01-18',
-            'time': '14:30',
-            'status': 'pending',
-            'location': 'ירושלים',
-            'address': 'ירושלים, רחוב יפו 35',
-          },
-          {
-            'id': '3',
-            'doctorName': 'ד"ר דוד ישראלי',
-            'patientName': 'דוד לוי',
-            'specialty': 'אורתופד',
-            'date': '2024-01-12',
-            'time': '11:00',
-            'status': 'completed',
-            'location': 'חיפה',
-            'address': 'חיפה, שדרות המגינים 47',
-          },
-          {
-            'id': '4',
-            'doctorName': 'ד"ר אברהם כהן',
-            'patientName': 'מיכל לוי',
-            'specialty': 'רופא משפחה',
-            'date': '2024-01-20',
-            'time': '10:30',
-            'status': 'pending',
-            'location': 'תל אביב',
-            'address': 'תל אביב, רחוב רוטשילד 23',
-          },
-          {
-            'id': '5',
-            'doctorName': 'ד"ר שרה לוי',
-            'patientName': 'יוסף כהן',
-            'specialty': 'קרדיולוג',
-            'date': '2024-01-22',
-            'time': '15:00',
-            'status': 'confirmed',
-            'location': 'ירושלים',
-            'address': 'ירושלים, רחוב יפו 35',
-          },
-        ];
+        _appointments = [];
         _isLoading = false;
       });
+      // PD-01: Remove development messages - show user-friendly error only
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('מציג נתונים לדוגמה (שגיאת API: $e)'),
-            backgroundColor: Colors.orange,
+            content: const Text('לא ניתן לטעון תורים כרגע. אנא נסה שוב מאוחר יותר.'),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -363,6 +325,20 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
 
   Widget _buildAppointmentCard(Map<String, dynamic> apt, {bool compact = false}) {
     final status = apt['status'] ?? 'pending';
+    final DateTime? appointmentDate = _parseAppointmentDate(apt);
+    final String dateText = (apt['date']?.toString().isNotEmpty ?? false)
+        ? apt['date'].toString()
+        : _formatDate(appointmentDate);
+    final String timeText = (apt['time']?.toString().isNotEmpty ?? false)
+        ? apt['time'].toString()
+        : _formatTime(appointmentDate);
+    final String doctorName = (apt['doctorName']?.toString().isNotEmpty ?? false)
+        ? apt['doctorName'].toString()
+        : (apt['doctor_name']?.toString() ?? '');
+    final String patientName = (apt['patientName']?.toString().isNotEmpty ?? false)
+        ? apt['patientName'].toString()
+        : (apt['patient_name']?.toString() ?? '');
+    final String specialty = (apt['specialty']?.toString() ?? '');
     final statusColor = status == 'confirmed' ? Colors.green : 
                        status == 'pending' ? Colors.orange :
                        status == 'completed' ? Colors.blue : Colors.grey;
@@ -391,7 +367,7 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              apt['doctorName'] ?? '',
+                              doctorName,
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -407,7 +383,7 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              apt['patientName'] ?? '',
+                              patientName,
                               style: const TextStyle(fontSize: 15),
                             ),
                           ),
@@ -415,7 +391,7 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        apt['specialty'] ?? '',
+                        specialty,
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey.shade600,
@@ -446,7 +422,7 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
               children: [
                 const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
                 const SizedBox(width: 8),
-                Text('${apt['date']} בשעה ${apt['time']}'),
+                Text('$dateText בשעה $timeText'),
               ],
             ),
             const SizedBox(height: 8),
@@ -454,7 +430,7 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
               children: [
                 const Icon(Icons.location_on, size: 18, color: Colors.grey),
                 const SizedBox(width: 8),
-                Expanded(child: Text(apt['location'] ?? '')),
+                Expanded(child: Text(apt['location']?.toString() ?? '')),
               ],
             ),
             if (!compact) ...[
@@ -481,11 +457,17 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
                       foregroundColor: Colors.red,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteAppointment(apt['id']),
+                    tooltip: 'מחק',
+                  ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.edit),
                     onPressed: () => _editAppointment(apt),
-                    tooltip: 'ערוך',
+                    tooltip: 'ערוך/דחה',
                   ),
                 ],
               ),
@@ -543,32 +525,50 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
     );
   }
 
-  void _updateStatus(String? appointmentId, String newStatus) {
+  Future<void> _updateStatus(String? appointmentId, String newStatus) async {
+    if (appointmentId == null) return;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('עדכון סטטוס'),
-        content: Text('האם לעדכן את סטטוס התור?'),
+        content: Text('האם לעדכן את סטטוס התור ל-$newStatus?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('ביטול'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              setState(() {
-                final index = _appointments.indexWhere((a) => a['id'] == appointmentId);
-                if (index != -1) {
-                  _appointments[index]['status'] = newStatus;
+              try {
+                if (newStatus == 'confirmed') {
+                  await _apiService.post('/appointments/$appointmentId/confirm', {});
+                } else if (newStatus == 'cancelled') {
+                  await _apiService.delete('/appointments/$appointmentId', {
+                    'reason': 'Cancelled by admin',
+                  });
                 }
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('סטטוס עודכן ל: $newStatus'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+                // Reload appointments to get updated status
+                await _loadAppointments();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('סטטוס עודכן ל: $newStatus'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('שגיאה בעדכון סטטוס: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('אשר'),
           ),
@@ -577,10 +577,100 @@ class _AdminAllAppointmentsState extends State<AdminAllAppointments> {
     );
   }
 
-  void _editAppointment(Map<String, dynamic> apt) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('פונקציית עריכה תתווסף בקרוב')),
+  Future<void> _editAppointment(Map<String, dynamic> apt) async {
+    // Navigate to reschedule page
+    final appointmentId = apt['id']?.toString();
+    final appointmentDate = _parseAppointmentDate(apt);
+    if (appointmentId == null || appointmentDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('לא ניתן לערוך תור זה')),
+      );
+      return;
+    }
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ReschedulePage(
+          appointmentId: appointmentId,
+          doctorId: apt['doctor_id']?.toString() ?? '',
+          doctorName: apt['doctorName']?.toString() ?? apt['doctor_name']?.toString() ?? 'רופא',
+          specialty: apt['specialty']?.toString() ?? '',
+          currentDate: appointmentDate,
+          currentTimeSlot: _formatTime(appointmentDate),
+        ),
+      ),
+    ).then((_) {
+      // Reload appointments after rescheduling
+      _loadAppointments();
+    });
+  }
+
+  Future<void> _deleteAppointment(String? appointmentId) async {
+    if (appointmentId == null) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('מחיקת תור'),
+        content: const Text('האם אתה בטוח שברצונך למחוק תור זה? פעולה זו לא ניתנת לביטול.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ביטול'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await _apiService.delete('/appointments/$appointmentId', {
+                  'reason': 'Deleted by admin',
+                });
+                await _loadAppointments();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('התור נמחק בהצלחה'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('שגיאה במחיקת תור: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('מחק'),
+          ),
+        ],
+      ),
     );
+  }
+
+  DateTime? _parseAppointmentDate(Map<String, dynamic> apt) {
+    final raw = apt['appointment_date'] ?? apt['appointmentDate'];
+    if (raw == null) return null;
+    return DateTime.tryParse(raw.toString());
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '';
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  String _formatTime(DateTime? date) {
+    if (date == null) return '';
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }
 

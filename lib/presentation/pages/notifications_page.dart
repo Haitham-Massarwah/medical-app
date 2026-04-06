@@ -60,14 +60,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
     switch (type) {
       case 'appointment_reminder':
         return Icons.calendar_today;
+      case 'appointment_confirmation':
       case 'appointment_confirmed':
         return Icons.check_circle;
+      case 'appointment_cancellation':
       case 'appointment_cancelled':
         return Icons.cancel;
+      case 'payment':
       case 'payment_received':
         return Icons.payment;
       case 'payment_failed':
         return Icons.error;
+      case 'system':
+        return Icons.info;
+      case 'doctor_message': // PD-10: Doctor/therapist messages
+        return Icons.message;
       default:
         return Icons.notifications;
     }
@@ -77,14 +84,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
     switch (type) {
       case 'appointment_reminder':
         return Colors.blue;
+      case 'appointment_confirmation':
       case 'appointment_confirmed':
         return Colors.green;
+      case 'appointment_cancellation':
       case 'appointment_cancelled':
         return Colors.red;
+      case 'payment':
       case 'payment_received':
         return Colors.green;
       case 'payment_failed':
         return Colors.red;
+      case 'system':
+        return Colors.orange;
+      case 'doctor_message': // PD-10: Doctor/therapist messages
+        return Colors.purple;
       default:
         return Colors.grey;
     }

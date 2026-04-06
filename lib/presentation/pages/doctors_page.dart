@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'calendar_booking_page.dart';
 import '../../services/doctor_service.dart';
 import '../../services/specialty_management_service.dart';
@@ -15,14 +16,34 @@ class _DoctorsPageState extends State<DoctorsPage> {
   bool _isLoading = true;
   final DoctorService _doctorService = DoctorService();
 
+  // PD-07: Subject-centric search (primary filter)
   String _selectedSpecialty = 'הכל';
   List<String> _specialties = ['הכל'];
+  
+  // PD-07: Name-based cross-filtering (secondary filter)
+  final TextEditingController _nameSearchController = TextEditingController();
+  String _nameQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadSpecialties();
     _loadDoctors();
+    // PD-07: Listen to name search changes for live filtering
+    _nameSearchController.addListener(_onNameSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _nameSearchController.dispose();
+    super.dispose();
+  }
+
+  // PD-07: Incremental filtering - update results while typing
+  void _onNameSearchChanged() {
+    setState(() {
+      _nameQuery = _nameSearchController.text;
+    });
   }
 
   Future<void> _loadSpecialties() async {
@@ -43,79 +64,89 @@ class _DoctorsPageState extends State<DoctorsPage> {
       );
       
       setState(() {
-        _doctors = doctorsData.map((data) => Doctor(
-          id: data['id'] ?? '',
-          name: data['name'] ?? data['first_name'] + ' ' + data['last_name'] ?? '',
-          specialty: data['specialty'] ?? '',
-          location: data['location'] ?? data['city'] ?? 'תל אביב',
-          rating: (data['rating'] ?? 4.5).toDouble(),
-          reviewCount: data['review_count'] ?? 0,
-          price: data['price'] ?? 200,
-          availableSlots: ['09:00', '10:30', '14:00', '15:30'], // Will fetch from API later
-        )).toList();
+        _doctors = doctorsData.map((data) {
+          double toDouble(dynamic v) {
+            if (v == null) return 0.0;
+            if (v is num) return v.toDouble();
+            return double.tryParse(v.toString()) ?? 0.0;
+          }
+
+          int toInt(dynamic v) {
+            if (v == null) return 0;
+            if (v is int) return v;
+            if (v is num) return v.toInt();
+            return int.tryParse(v.toString()) ?? 0;
+          }
+
+          final firstName = (data['first_name'] ?? '').toString();
+          final lastName = (data['last_name'] ?? '').toString();
+          final combinedName = (data['name'] ?? '$firstName $lastName').toString().trim();
+          final availableSlotsRaw = data['available_slots'];
+          final availableSlots = availableSlotsRaw is List
+              ? availableSlotsRaw.map((slot) => slot.toString()).toList()
+              : <String>[];
+
+          return Doctor(
+            id: data['id'] ?? '',
+            name: combinedName,
+            specialty: (data['specialty'] ?? data['specialty_name'] ?? '').toString(),
+            location: (data['location'] ?? data['city'] ?? '').toString(),
+            rating: toDouble(data['rating']),
+            reviewCount: toInt(data['review_count'] ?? data['total_reviews']),
+            price: toInt(data['price'] ?? 0),
+            availableSlots: availableSlots,
+          );
+        }).toList();
         _isLoading = false;
       });
     } catch (e) {
-      // Fallback to mock data
       setState(() {
-        _doctors = _getMockDoctors();
+        _doctors = [];
         _isLoading = false;
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('שגיאה בטעינת רופאים מהשרת'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  List<Doctor> _getMockDoctors() {
-    return [
-      Doctor(
-        id: '1',
-        name: 'ד"ר אברהם כהן',
-        specialty: 'רופא משפחה',
-        location: 'תל אביב',
-        rating: 4.8,
-        reviewCount: 127,
-        price: 200,
-        availableSlots: ['09:00', '10:30', '14:00', '15:30'],
-      ),
-      Doctor(
-        id: '2',
-        name: 'ד"ר שרה לוי',
-        specialty: 'קרדיולוג',
-        location: 'ירושלים',
-        rating: 4.9,
-        reviewCount: 89,
-        price: 350,
-        availableSlots: ['08:00', '11:00', '16:00'],
-      ),
-      Doctor(
-        id: '3',
-        name: 'ד"ר דוד ישראלי',
-        specialty: 'אורתופד',
-        location: 'חיפה',
-        rating: 4.7,
-        reviewCount: 156,
-        price: 300,
-        availableSlots: ['09:30', '12:00', '14:30', '17:00'],
-      ),
-      Doctor(
-        id: '4',
-        name: 'ד"ר רחל גולדברג',
-        specialty: 'רופאת עיניים',
-        location: 'תל אביב',
-        rating: 4.9,
-        reviewCount: 203,
-        price: 250,
-        availableSlots: ['08:30', '10:00', '13:30', '15:00'],
-      ),
-    ];
+  // PD-07: Filter doctors by subject (specialty) and name (cross-filtering)
+  List<Doctor> _getFilteredDoctors() {
+    var filtered = _doctors;
+    
+    // Primary filter: Subject/Specialty
+    if (_selectedSpecialty != 'הכל') {
+      filtered = filtered.where((doctor) => doctor.specialty == _selectedSpecialty).toList();
+    }
+    
+    // Secondary filter: Name (cross-filtering)
+    if (_nameQuery.isNotEmpty) {
+      filtered = filtered.where((doctor) {
+        final nameLower = doctor.name.toLowerCase();
+        final queryLower = _nameQuery.toLowerCase();
+        return nameLower.contains(queryLower);
+      }).toList();
+    }
+    
+    return filtered;
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredDoctors = _selectedSpecialty == 'הכל'
-        ? _doctors
-        : _doctors.where((doctor) => doctor.specialty == _selectedSpecialty).toList();
+    final filteredDoctors = _getFilteredDoctors();
+    
+    // PD-08: Use language-aware text direction
+    final locale = Localizations.localeOf(context);
+    final isRTL = locale.languageCode == 'he' || locale.languageCode == 'ar';
 
-    return Scaffold(
+    return Directionality(
+      textDirection: isRTL ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('רופאים'),
         backgroundColor: Colors.blue,
@@ -123,27 +154,62 @@ class _DoctorsPageState extends State<DoctorsPage> {
       ),
       body: Column(
         children: [
-          // Specialty Filter
+          // PD-07: Search Filters Section
           Container(
             padding: const EdgeInsets.all(16),
-            child: DropdownButtonFormField<String>(
-              value: _selectedSpecialty,
-              decoration: const InputDecoration(
-                labelText: 'בחר התמחות',
-                border: OutlineInputBorder(),
-              ),
-              items: _specialties.map((specialty) {
-                return DropdownMenuItem(
-                  value: specialty,
-                  child: Text(specialty),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedSpecialty = value!;
-                });
-                _loadDoctors(); // Reload doctors when filter changes
-              },
+            color: Colors.grey.shade100,
+            child: Column(
+              children: [
+                // Primary: Subject/Specialty Filter
+                DropdownButtonFormField<String>(
+                  value: _selectedSpecialty,
+                  decoration: const InputDecoration(
+                    labelText: 'בחר התמחות (חובה)',
+                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  items: _specialties.map((specialty) {
+                    return DropdownMenuItem(
+                      value: specialty,
+                      child: Text(specialty),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedSpecialty = value!;
+                    });
+                    _loadDoctors(); // Reload doctors when filter changes
+                  },
+                ),
+                const SizedBox(height: 16),
+                // Secondary: Name Search (Cross-filtering)
+                TextField(
+                  controller: _nameSearchController,
+                  decoration: InputDecoration(
+                    labelText: 'חפש לפי שם רופא (אופציונלי)',
+                    hintText: 'הכנס שם רופא...',
+                    prefixIcon: const Icon(Icons.person_search),
+                    border: const OutlineInputBorder(),
+                    filled: true,
+                    fillColor: Colors.white,
+                    suffixIcon: _nameQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _nameSearchController.clear();
+                            },
+                          )
+                        : null,
+                  ),
+                  // PD-07: Live filtering - updates as user types
+                  onChanged: (value) {
+                    setState(() {
+                      _nameQuery = value;
+                    });
+                  },
+                ),
+              ],
             ),
           ),
           
@@ -175,6 +241,7 @@ class _DoctorsPageState extends State<DoctorsPage> {
                       ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -269,7 +336,9 @@ class DoctorCard extends StatelessWidget {
                   radius: 30,
                   backgroundColor: Colors.blue.shade100,
                   child: Text(
-                    doctor.name.split(' ')[1].substring(0, 1),
+                    doctor.name.trim().isNotEmpty
+                        ? doctor.name.trim().substring(0, 1)
+                        : '?',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -301,7 +370,7 @@ class DoctorCard extends StatelessWidget {
                           const Icon(Icons.location_on, size: 16, color: Colors.grey),
                           const SizedBox(width: 4),
                           Text(
-                            doctor.location,
+                            doctor.location.isEmpty ? 'לא צוין' : doctor.location,
                             style: const TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ],
@@ -342,8 +411,24 @@ class DoctorCard extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    minimumSize: const Size(140, 48),
+                    elevation: 4,
                   ),
-                  child: const Text('קבע תור'),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.calendar_today, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'קבע תור',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

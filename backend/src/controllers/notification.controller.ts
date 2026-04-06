@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { asyncHandler, NotFoundError, AuthorizationError } from '../middleware/errorHandler';
+import { asyncHandler, NotFoundError, ValidationError } from '../middleware/errorHandler';
 import db from '../config/database';
 import { logger } from '../config/logger';
+import { sendSMS } from '../services/sms.service';
 
 export class NotificationController {
   /**
@@ -14,7 +15,7 @@ export class NotificationController {
     const { is_read } = req.query;
 
     let query = db('notifications')
-      .where({ recipient_id: userId });
+      .where({ user_id: userId });
 
     if (is_read !== undefined) {
       query = query.andWhere({ is_read: is_read === 'true' });
@@ -49,7 +50,7 @@ export class NotificationController {
     const userId = req.user!.userId;
 
     const [{ count }] = await db('notifications')
-      .where({ recipient_id: userId, is_read: false })
+      .where({ user_id: userId, is_read: false })
       .count('* as count');
 
     res.status(200).json({
@@ -57,6 +58,67 @@ export class NotificationController {
       data: {
         unread_count: parseInt(count as string),
       },
+    });
+  });
+
+  /**
+   * Send SMS directly
+   * POST /api/v1/notifications/sms
+   */
+  sendSMS = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { to, message, type } = req.body;
+
+    if (!to || !message) {
+      throw new ValidationError('Phone number and message are required');
+    }
+
+    logger.info('Sending SMS', { to, type });
+
+    try {
+      const success = await sendSMS({
+        to,
+        message,
+      });
+
+      if (success) {
+        res.status(200).json({
+          success: true,
+          message: 'SMS sent successfully',
+          data: {
+            to,
+            type: type || 'general',
+          },
+        });
+      } else {
+        logger.error('SMS sending returned false', { 
+          to, 
+          message,
+          twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER,
+          twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ? 'configured' : 'missing',
+        });
+        throw new Error('Failed to send SMS - Twilio service returned false. Check backend logs for details.');
+      }
+    } catch (error: any) {
+      logger.error('SMS sending error in controller', { 
+        to, 
+        error: error.message, 
+        stack: error.stack 
+      });
+      throw error;
+    }
+  });
+
+  /**
+   * Check SMS service status
+   * GET /api/v1/notifications/sms/status
+   */
+  getSMSStatus = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { checkSMSServiceStatus } = require('../services/sms.service');
+    const status = checkSMSServiceStatus();
+
+    res.status(200).json({
+      success: true,
+      data: status,
     });
   });
 
@@ -69,7 +131,7 @@ export class NotificationController {
     const userId = req.user!.userId;
 
     const notification = await db('notifications')
-      .where({ id, recipient_id: userId })
+      .where({ id, user_id: userId })
       .first();
 
     if (!notification) {
@@ -93,7 +155,7 @@ export class NotificationController {
     const userId = req.user!.userId;
 
     const [notification] = await db('notifications')
-      .where({ id, recipient_id: userId })
+      .where({ id, user_id: userId })
       .update({
         is_read: true,
         read_at: new Date(),
@@ -122,7 +184,7 @@ export class NotificationController {
     const userId = req.user!.userId;
 
     await db('notifications')
-      .where({ recipient_id: userId, is_read: false })
+      .where({ user_id: userId, is_read: false })
       .update({
         is_read: true,
         read_at: new Date(),
@@ -146,7 +208,7 @@ export class NotificationController {
     const userId = req.user!.userId;
 
     const deleted = await db('notifications')
-      .where({ id, recipient_id: userId })
+      .where({ id, user_id: userId })
       .delete();
 
     if (!deleted) {
@@ -171,17 +233,20 @@ export class NotificationController {
       type,
       title,
       message,
-      priority = 'medium',
+      priority: _priority = 'medium',
     } = req.body;
 
+    const tenantId = (req as any).tenantId || req.user?.tenantId;
     const [notification] = await db('notifications')
       .insert({
-        recipient_id,
+        tenant_id: tenantId,
+        user_id: recipient_id,
         type,
         title,
         message,
-        priority,
         is_read: false,
+        status: 'sent',
+        sent_at: new Date(),
         created_at: new Date(),
         updated_at: new Date(),
       })
@@ -212,12 +277,16 @@ export class NotificationController {
       message,
     } = req.body;
 
+    const tenantId = (req as any).tenantId || req.user?.tenantId;
     const notifications = recipient_ids.map((recipientId: string) => ({
-      recipient_id: recipientId,
+      tenant_id: tenantId,
+      user_id: recipientId,
       type,
       title,
       message,
       is_read: false,
+      status: 'sent',
+      sent_at: new Date(),
       created_at: new Date(),
       updated_at: new Date(),
     }));
@@ -315,5 +384,6 @@ export class NotificationController {
     });
   });
 }
+
 
 

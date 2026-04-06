@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../services/admin_service.dart';
+import '../../services/doctor_service.dart';
+import '../../services/user_service.dart';
 
 class CreateDoctorPage extends StatefulWidget {
   final bool isAdmin;
@@ -13,6 +16,10 @@ class CreateDoctorPage extends StatefulWidget {
 class _CreateDoctorPageState extends State<CreateDoctorPage> {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
+  final _adminService = AdminService();
+  final DoctorService _doctorService = DoctorService();
+  final UserService _userService = UserService();
+  bool _doctorPaymentsEnabled = true; // Default to enabled
 
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -217,6 +224,27 @@ class _CreateDoctorPageState extends State<CreateDoctorPage> {
       });
     });
     _refreshCalculatedPrice();
+    _loadPermissions();
+  }
+
+  Future<void> _loadPermissions() async {
+    try {
+      final permissions = await _adminService.getPermissions();
+      if (mounted) {
+        setState(() {
+          _doctorPaymentsEnabled = permissions['doctor_payments_enabled'] ?? true;
+          // If payments disabled, disable billing
+          if (!_doctorPaymentsEnabled) {
+            _doctorBillingEnabled = false;
+          }
+        });
+      }
+    } catch (e) {
+      // Default to enabled if error
+      setState(() {
+        _doctorPaymentsEnabled = true;
+      });
+    }
   }
 
   Map<String, dynamic> get _currentPlan =>
@@ -656,9 +684,31 @@ class _CreateDoctorPageState extends State<CreateDoctorPage> {
 
                             // Doctor billing (subscription + Visa)
                             _buildSectionHeader('חיוב רופא ותוכנית מנוי'),
+                            if (!_doctorPaymentsEnabled)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.orange.shade200),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.info_outline, color: Colors.orange.shade700),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'תשלומים מרופאים כבויים במערכת. פרטי כרטיס אשראי לא נדרשים.',
+                                        style: TextStyle(color: Colors.orange.shade700),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             CheckboxListTile(
                               value: _doctorBillingEnabled,
-                              onChanged: widget.isAdmin
+                              onChanged: widget.isAdmin && _doctorPaymentsEnabled
                                   ? (value) {
                                       setState(() {
                                         _doctorBillingEnabled = value ?? false;
@@ -731,7 +781,7 @@ class _CreateDoctorPageState extends State<CreateDoctorPage> {
                                   : null,
                             ),
                             const SizedBox(height: 16),
-                            if (_doctorBillingEnabled && widget.isAdmin) ...[
+                            if (_doctorBillingEnabled && widget.isAdmin && _doctorPaymentsEnabled) ...[
                               Text(
                                 'עלות בסיסית (לפני הנחה): ${basePlanPrice.toStringAsFixed(0)} ₪ עבור $currentPlanMonths חודשים',
                                 style: const TextStyle(
@@ -823,110 +873,113 @@ class _CreateDoctorPageState extends State<CreateDoctorPage> {
                               ),
                               const SizedBox(height: 16),
                             ],
-                            TextFormField(
-                              controller: _cardHolderController,
-                              enabled: _doctorBillingEnabled,
-                              decoration: const InputDecoration(
-                                labelText: 'שם בעל הכרטיס',
-                                border: OutlineInputBorder(),
-                                filled: true,
-                                fillColor: Colors.white,
-                                labelStyle: TextStyle(color: Colors.black87),
-                              ),
-                              style: const TextStyle(color: Colors.black),
-                              validator: (value) {
-                                if (!_doctorBillingEnabled) return null;
-                                if (value == null || value.isEmpty) {
-                                  return 'נא להזין שם בעל הכרטיס';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _cardNumberController,
-                              enabled: _doctorBillingEnabled,
-                              decoration: const InputDecoration(
-                                labelText: 'מספר כרטיס',
-                                hintText: '1234 5678 9012 3456',
-                                border: OutlineInputBorder(),
-                                filled: true,
-                                fillColor: Colors.white,
-                                labelStyle: TextStyle(color: Colors.black87),
-                              ),
-                              style: const TextStyle(color: Colors.black),
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                if (!_doctorBillingEnabled) return null;
-                                if (value == null || value.isEmpty) {
-                                  return 'נא להזין מספר כרטיס';
-                                }
-                                if (value.replaceAll(' ', '').length < 12) {
-                                  return 'מספר כרטיס לא תקין';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _cardExpiryController,
-                                    enabled: _doctorBillingEnabled,
-                                    decoration: const InputDecoration(
-                                      labelText: 'תוקף (MM/YY)',
-                                      hintText: '05/28',
-                                      border: OutlineInputBorder(),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      labelStyle:
-                                          TextStyle(color: Colors.black87),
-                                    ),
-                                    style: const TextStyle(color: Colors.black),
-                                    validator: (value) {
-                                      if (!_doctorBillingEnabled) return null;
-                                      if (value == null || value.isEmpty) {
-                                        return 'נא להזין תאריך תוקף';
-                                      }
-                                      if (!RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$')
-                                          .hasMatch(value)) {
-                                        return 'פורמט לא תקין';
-                                      }
-                                      return null;
-                                    },
-                                  ),
+                            if (_doctorPaymentsEnabled) ...[
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _cardHolderController,
+                                enabled: _doctorBillingEnabled,
+                                decoration: const InputDecoration(
+                                  labelText: 'שם בעל הכרטיס',
+                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  labelStyle: TextStyle(color: Colors.black87),
                                 ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _cardCvvController,
-                                    enabled: _doctorBillingEnabled,
-                                    decoration: const InputDecoration(
-                                      labelText: 'CVV',
-                                      border: OutlineInputBorder(),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      labelStyle:
-                                          TextStyle(color: Colors.black87),
-                                    ),
-                                    style: const TextStyle(color: Colors.black),
-                                    keyboardType: TextInputType.number,
-                                    obscureText: true,
-                                    validator: (value) {
-                                      if (!_doctorBillingEnabled) return null;
-                                      if (value == null || value.isEmpty) {
-                                        return 'נא להזין CVV';
-                                      }
-                                      if (value.length < 3) {
-                                        return 'CVV לא תקין';
-                                      }
-                                      return null;
-                                    },
-                                  ),
+                                style: const TextStyle(color: Colors.black),
+                                validator: (value) {
+                                  if (!_doctorBillingEnabled) return null;
+                                  if (value == null || value.isEmpty) {
+                                    return 'נא להזין שם בעל הכרטיס';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _cardNumberController,
+                                enabled: _doctorBillingEnabled,
+                                decoration: const InputDecoration(
+                                  labelText: 'מספר כרטיס',
+                                  hintText: '1234 5678 9012 3456',
+                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  labelStyle: TextStyle(color: Colors.black87),
                                 ),
-                              ],
-                            ),
+                                style: const TextStyle(color: Colors.black),
+                                keyboardType: TextInputType.number,
+                                validator: (value) {
+                                  if (!_doctorBillingEnabled) return null;
+                                  if (value == null || value.isEmpty) {
+                                    return 'נא להזין מספר כרטיס';
+                                  }
+                                  if (value.replaceAll(' ', '').length < 12) {
+                                    return 'מספר כרטיס לא תקין';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _cardExpiryController,
+                                      enabled: _doctorBillingEnabled,
+                                      decoration: const InputDecoration(
+                                        labelText: 'תוקף (MM/YY)',
+                                        hintText: '05/28',
+                                        border: OutlineInputBorder(),
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        labelStyle:
+                                            TextStyle(color: Colors.black87),
+                                      ),
+                                      style: const TextStyle(color: Colors.black),
+                                      validator: (value) {
+                                        if (!_doctorBillingEnabled) return null;
+                                        if (value == null || value.isEmpty) {
+                                          return 'נא להזין תאריך תוקף';
+                                        }
+                                        if (!RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$')
+                                            .hasMatch(value)) {
+                                          return 'פורמט לא תקין';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _cardCvvController,
+                                      enabled: _doctorBillingEnabled,
+                                      decoration: const InputDecoration(
+                                        labelText: 'CVV',
+                                        border: OutlineInputBorder(),
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        labelStyle:
+                                            TextStyle(color: Colors.black87),
+                                      ),
+                                      style: const TextStyle(color: Colors.black),
+                                      keyboardType: TextInputType.number,
+                                      obscureText: true,
+                                      validator: (value) {
+                                        if (!_doctorBillingEnabled) return null;
+                                        if (value == null || value.isEmpty) {
+                                          return 'נא להזין CVV';
+                                        }
+                                        if (value.length < 3) {
+                                          return 'CVV לא תקין';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                             const SizedBox(height: 32),
 
                             // App payments availability
@@ -1217,103 +1270,41 @@ class _CreateDoctorPageState extends State<CreateDoctorPage> {
     setState(() => _isLoading = true);
 
     try {
-      final selectedPlan = _subscriptionPlans
-          .firstWhere((plan) => plan['id'] == _selectedPlanId);
-      final int selectedPlanMonths = selectedPlan['months'] as int;
-      final double subscriptionBasePrice =
-          selectedPlanMonths * _monthlyBasePrice;
-      final feePercentageValue =
-          double.tryParse(_feePercentageController.text.trim());
-      final double? discountPercentage = widget.isAdmin && _doctorBillingEnabled
-          ? double.tryParse(
-              _discountController.text.replaceAll(',', '.').trim())
-          : null;
-      final double? sanitizedDiscount = discountPercentage == null
-          ? null
-          : discountPercentage.clamp(0, 100).toDouble();
-      final double? subscriptionFinalPrice =
-          widget.isAdmin && _doctorBillingEnabled
-              ? _calculatePlanPrice()
-              : null;
+      final registerResponse = await _authService.register(
+        email: _emailController.text.trim(),
+        password: 'Doctor123',
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phone: _phoneController.text.trim(),
+        role: 'doctor',
+        storeToken: false,
+      );
 
-      // Create user account first
-      final userData = {
-        'email': _emailController.text.trim(),
-        'password': 'Doctor123', // Default temporary password
-        'first_name': _firstNameController.text.trim(),
-        'last_name': _lastNameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'city': _cityController.text.trim(),
-        'role': 'doctor',
-      };
+      final userId = registerResponse['data']?['user']?['id']?.toString();
+      if (userId == null || userId.isEmpty) {
+        throw Exception('User creation failed');
+      }
 
-      // Create doctor profile
-      final doctorData = {
-        'primary_specialty':
-            _selectedSpecialties.isNotEmpty ? _selectedSpecialties.first : null,
-        'specialties': _selectedSpecialties,
-        'license_provided': _licenseInfoEnabled,
+      final doctorData = <String, dynamic>{
+        'user_id': userId,
+        'specialty':
+            _selectedSpecialties.isNotEmpty ? _selectedSpecialties.first : 'General',
         'license_number':
             _licenseInfoEnabled ? _licenseNumberController.text.trim() : null,
-        'years_of_experience': _licenseInfoEnabled
-            ? int.tryParse(_yearsOfExperienceController.text.trim())
-            : null,
-        'consultation_fee':
-            double.tryParse(_consultationFeeController.text.trim()),
         'bio': _bioController.text.trim(),
         'languages': _selectedLanguages,
-        'doctor_approved': _doctorApproved,
-        'doctor_billing_enabled': widget.isAdmin && _doctorBillingEnabled,
-        'doctor_subscription_plan': widget.isAdmin && _doctorBillingEnabled
-            ? selectedPlan['id'] as String
-            : null,
-        'doctor_subscription_plan_label':
-            widget.isAdmin && _doctorBillingEnabled
-                ? selectedPlan['label'] as String
-                : null,
-        'subscription_months':
-            widget.isAdmin && _doctorBillingEnabled ? selectedPlanMonths : null,
-        'subscription_base_price': widget.isAdmin && _doctorBillingEnabled
-            ? subscriptionBasePrice
-            : null,
-        'subscription_discount_percentage':
-            widget.isAdmin && _doctorBillingEnabled
-                ? (sanitizedDiscount ?? 0)
-                : null,
-        'subscription_final_price': subscriptionFinalPrice,
-        'subscription_installments': widget.isAdmin && _doctorBillingEnabled
-            ? _selectedInstallments
-            : null,
-        'billing_card_holder': widget.isAdmin && _doctorBillingEnabled
-            ? _cardHolderController.text.trim()
-            : null,
-        'billing_card_number': widget.isAdmin && _doctorBillingEnabled
-            ? _cardNumberController.text.trim()
-            : null,
-        'billing_card_expiry': widget.isAdmin && _doctorBillingEnabled
-            ? _cardExpiryController.text.trim()
-            : null,
-        'billing_card_cvv': widget.isAdmin && _doctorBillingEnabled
-            ? _cardCvvController.text.trim()
-            : null,
-        'accept_app_payments': _doctorApproved && _appPaymentsEnabled,
-        'bank_details_enabled': _bankDetailsEnabled,
-        'bank_name':
-            _bankDetailsEnabled ? _bankNameController.text.trim() : null,
-        'branch_number':
-            _bankDetailsEnabled ? _branchNumberController.text.trim() : null,
-        'bank_account':
-            _bankDetailsEnabled ? _bankAccountController.text.trim() : null,
-        'fee_exemption_active': _isFeeExemptionActive,
-        'fee_deduction_enabled': !_isFeeExemptionActive && _feeDeductionEnabled,
-        'fee_deduction_percentage':
-            !_isFeeExemptionActive && _feeDeductionEnabled
-                ? (feePercentageValue ?? 0)
-                : 0,
       };
 
-      // TODO: Implement actual API call to create doctor
-      await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+      await _doctorService.createDoctor(doctorData);
+
+      if (_cityController.text.trim().isNotEmpty) {
+        await _userService.updateUser(
+          userId: userId,
+          data: {
+            'city': _cityController.text.trim(),
+          },
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

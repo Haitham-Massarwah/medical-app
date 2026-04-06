@@ -1,8 +1,7 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logger/logger.dart';
-import 'package:path_provider/path_provider.dart';
+import 'environment_io.dart';
 
 class AppConfig {
   static late SharedPreferences _prefs;
@@ -15,23 +14,38 @@ class AppConfig {
   static bool get isTest => kDebugMode && const bool.fromEnvironment('dart.vm.product') == false;
   
   // API Configuration
-  // Development: Use local backend (http://localhost:3000)
-  // Production: Use production server (http://66.29.133.192:3000)
   static String get baseUrl {
-    // Check for environment variable override (useful for testing)
-    const envBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
-    if (envBaseUrl.isNotEmpty) {
-      return envBaseUrl;
+    // Environment variable overrides
+    const baseUrl = String.fromEnvironment('BASE_URL', defaultValue: '');
+    const baseUrlProd =
+        String.fromEnvironment('BASE_URL_PRODUCTION', defaultValue: '');
+    if (baseUrl.isNotEmpty) {
+      return baseUrl;
     }
     
+    // PRIORITY: When running web in debug mode, ALWAYS use local backend
+    if (kIsWeb && kDebugMode) {
+      return 'http://localhost:3000/api/v1';
+    }
+    
+    if (isProduction && baseUrlProd.isNotEmpty) {
+      return baseUrlProd;
+    }
+    if (kIsWeb && baseUrlProd.isNotEmpty) {
+      return baseUrlProd;
+    }
+
     // Check ENVIRONMENT.txt file or SharedPreferences
     final env = _getEnvironment();
-    
+
     if (env == 'Production') {
-      return 'http://66.29.133.192:3000/api/v1';
+      return 'https://api.medical-appointments.com/api/v1';
     }
-    
+
     // Default to Development
+    if (kIsWeb) {
+      return 'https://api.medical-appointments.com/api/v1';
+    }
     return 'http://localhost:3000/api/v1';
   }
   
@@ -43,39 +57,41 @@ class AppConfig {
     }
     
     // Try to read from SharedPreferences first (faster, works on all platforms)
-    final prefsEnv = _prefs.getString('app_environment');
-    if (prefsEnv != null && (prefsEnv == 'Production' || prefsEnv == 'Development')) {
-      _cachedEnvironment = prefsEnv;
-      return prefsEnv;
+    // Only if _prefs is initialized
+    try {
+      final prefsEnv = _prefs.getString('app_environment');
+      if (prefsEnv != null && (prefsEnv == 'Production' || prefsEnv == 'Development')) {
+        _cachedEnvironment = prefsEnv;
+        return prefsEnv;
+      }
+    } catch (e) {
+      // _prefs not initialized yet, continue to file reading
     }
     
     // Try to read from ENVIRONMENT.txt file (desktop only - synchronous)
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (!kIsWeb && isDesktop) {
       try {
-        // Try multiple locations for ENVIRONMENT.txt
-        final possiblePaths = [
-          'ENVIRONMENT.txt', // Current directory
-          Directory.current.path + Platform.pathSeparator + 'ENVIRONMENT.txt',
-        ];
-        
-        for (final filePath in possiblePaths) {
-          final envFile = File(filePath);
-          if (envFile.existsSync()) {
-            final content = envFile.readAsStringSync().trim();
-            if (content == 'Production' || content == 'Development') {
-              _cachedEnvironment = content;
-              // Cache in SharedPreferences for faster access
-              _prefs.setString('app_environment', content);
-              return content;
-            }
+        final content = readEnvironmentFileSync();
+        if (content != null) {
+          _cachedEnvironment = content;
+          // Cache in SharedPreferences for faster access (only if initialized)
+          try {
+            _prefs.setString('app_environment', content);
+          } catch (e) {
+            // _prefs not initialized yet, that's okay
           }
+          return content;
         }
       } catch (e) {
-        _logger.w('Could not read ENVIRONMENT.txt: $e');
+        // Error reading file, continue to default
       }
     }
     
-    // Default to Development
+    // Default based on platform
+    if (kIsWeb) {
+      _cachedEnvironment = 'Production';
+      return _cachedEnvironment!;
+    }
     _cachedEnvironment = 'Development';
     return 'Development';
   }
@@ -86,41 +102,41 @@ class AppConfig {
     
     if (!kIsWeb) {
       try {
-        // Try multiple locations for ENVIRONMENT.txt
-        final possiblePaths = [
-          'ENVIRONMENT.txt', // Current directory (works for desktop)
-          Directory.current.path + Platform.pathSeparator + 'ENVIRONMENT.txt', // Desktop
-        ];
-        
-        // For mobile, try documents directory
-        if (Platform.isAndroid || Platform.isIOS) {
-          final docsDir = await getApplicationDocumentsDirectory();
-          possiblePaths.add(docsDir.path + Platform.pathSeparator + 'ENVIRONMENT.txt');
-        }
-        
-        for (final filePath in possiblePaths) {
-          final envFile = File(filePath);
-          if (envFile.existsSync()) {
-            final content = envFile.readAsStringSync().trim();
-            if (content == 'Production' || content == 'Development') {
-              _cachedEnvironment = content;
-              await _prefs.setString('app_environment', content);
-              _logger.i('Environment reloaded: $content');
-              _logger.i('Base URL: $baseUrl');
-              return;
-            }
+        final content = await readEnvironmentFile();
+        if (content != null) {
+          _cachedEnvironment = content;
+          try {
+            await _prefs.setString('app_environment', content);
+          } catch (e) {
+            // _prefs not initialized yet, that's okay
           }
+          try {
+            _logger.i('Environment reloaded: $content');
+            _logger.i('Base URL: $baseUrl');
+          } catch (e) {
+            // Logger not initialized yet
+          }
+          return;
         }
       } catch (e) {
-        _logger.w('Could not reload ENVIRONMENT.txt: $e');
+        try {
+          _logger.w('Could not reload ENVIRONMENT.txt: $e');
+        } catch (e) {
+          // Logger not initialized
+        }
       }
     }
     
-    // Fallback to SharedPreferences
-    final prefsEnv = _prefs.getString('app_environment');
-    if (prefsEnv != null && (prefsEnv == 'Production' || prefsEnv == 'Development')) {
-      _cachedEnvironment = prefsEnv;
-    } else {
+    // Fallback to SharedPreferences (only if initialized)
+    try {
+      final prefsEnv = _prefs.getString('app_environment');
+      if (prefsEnv != null && (prefsEnv == 'Production' || prefsEnv == 'Development')) {
+        _cachedEnvironment = prefsEnv;
+      } else {
+        _cachedEnvironment = 'Development';
+      }
+    } catch (e) {
+      // _prefs not initialized, use default
       _cachedEnvironment = 'Development';
     }
   }
@@ -238,7 +254,11 @@ class AppConfig {
       }
       return null;
     } catch (e) {
-      _logger.e('Error getting stored value for key $key: $e');
+      try {
+        _logger.e('Error getting stored value for key $key: $e');
+      } catch (e) {
+        // Logger not initialized
+      }
       return null;
     }
   }
@@ -259,7 +279,11 @@ class AppConfig {
       }
       return false;
     } catch (e) {
-      _logger.e('Error storing value for key $key: $e');
+      try {
+        _logger.e('Error storing value for key $key: $e');
+      } catch (e) {
+        // Logger not initialized
+      }
       return false;
     }
   }
@@ -269,7 +293,11 @@ class AppConfig {
     try {
       return await _prefs.remove(key);
     } catch (e) {
-      _logger.e('Error clearing stored value for key $key: $e');
+      try {
+        _logger.e('Error clearing stored value for key $key: $e');
+      } catch (e) {
+        // Logger not initialized
+      }
       return false;
     }
   }
@@ -279,7 +307,11 @@ class AppConfig {
     try {
       return await _prefs.clear();
     } catch (e) {
-      _logger.e('Error clearing all stored values: $e');
+      try {
+        _logger.e('Error clearing all stored values: $e');
+      } catch (e) {
+        // Logger not initialized
+      }
       return false;
     }
   }

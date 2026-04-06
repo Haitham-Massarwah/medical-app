@@ -10,14 +10,26 @@ export class AppointmentController {
     this.appointmentService = new AppointmentService();
   }
 
+  private resolveTenantId(req: Request): string {
+    const tenantId =
+      req.tenantId ||
+      req.user?.tenantId ||
+      (req.headers['x-tenant-id'] as string | undefined) ||
+      '';
+    if (!tenantId) {
+      throw new ApiError(400, 'Tenant ID not found');
+    }
+    return tenantId;
+  }
+
   /**
    * Get all appointments
    * @route GET /api/v1/appointments
    */
   public async getAppointments(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const tenantId = req.headers['x-tenant-id'] as string;
-      const userId = req.user?.id || '';
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
       const role = req.user?.role || '';
 
       const { page = 1, limit = 20, status, doctorId, patientId, startDate, endDate } = req.query;
@@ -52,17 +64,36 @@ export class AppointmentController {
   }
 
   /**
+   * Get no-show risk prediction for an appointment
+   * @route GET /api/v1/appointments/:id/no-show-risk
+   */
+  public async getNoShowRisk(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const tenantId = this.resolveTenantId(req);
+      const result = await this.appointmentService.getNoShowRisk(id, tenantId);
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      logger.error('Error getting no-show risk:', error);
+      next(error);
+    }
+  }
+
+  /**
    * Get appointment by ID
    * @route GET /api/v1/appointments/:id
    */
   public async getAppointmentById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const tenantId = req.headers['x-tenant-id'] as string;
-    const userId = req.user?.id || '';
-    const role = req.user?.role || '';
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
+      const role = req.user?.role || '';
 
-    const appointment = await this.appointmentService.getAppointmentById(id, tenantId, userId, role);
+      const appointment = await this.appointmentService.getAppointmentById(id, tenantId, userId, role);
 
       if (!appointment) {
         throw new ApiError(404, 'Appointment not found');
@@ -84,9 +115,8 @@ export class AppointmentController {
    */
   public async bookAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const tenantId = req.headers['x-tenant-id'] as string;
-      const userId = req.user?.id || '';
-      const role = req.user?.role || '';
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
 
       const {
         doctorId,
@@ -151,8 +181,8 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const { reason } = req.body;
-      const tenantId = req.headers['x-tenant-id'] as string;
-      const userId = req.user?.id || '';
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
       const role = req.user?.role || '';
 
       // Check cancellation policy
@@ -191,8 +221,8 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const { newAppointmentDate, durationMinutes, reason } = req.body;
-      const tenantId = req.headers['x-tenant-id'] as string;
-      const userId = req.user?.id || '';
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
       const role = req.user?.role || '';
 
       if (!newAppointmentDate) {
@@ -249,8 +279,8 @@ export class AppointmentController {
   public async confirmAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const tenantId = req.headers['x-tenant-id'] as string;
-      const userId = req.user?.id || '';
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
 
       await this.appointmentService.confirmAppointment(id, tenantId, userId);
 
@@ -267,14 +297,43 @@ export class AppointmentController {
   }
 
   /**
+   * Update appointment
+   * @route PUT /api/v1/appointments/:id
+   */
+  public async updateAppointment(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
+      const { status, notes } = req.body;
+
+      const updated = await this.appointmentService.updateAppointment(id, tenantId, userId, {
+        status,
+        notes,
+      });
+
+      logger.info(`Appointment updated: ${id} by user: ${userId}`);
+
+      res.status(200).json({
+        success: true,
+        data: updated,
+        message: 'Appointment updated successfully',
+      });
+    } catch (error) {
+      logger.error('Error updating appointment:', error);
+      next(error);
+    }
+  }
+
+  /**
    * Mark appointment as no-show
    * @route POST /api/v1/appointments/:id/no-show
    */
   public async markNoShow(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const tenantId = req.headers['x-tenant-id'] as string;
-      const userId = req.user?.id || '';
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
 
       await this.appointmentService.markNoShow(id, tenantId, userId);
 
@@ -296,7 +355,7 @@ export class AppointmentController {
    */
   public async getAvailableSlots(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const tenantId = req.headers['x-tenant-id'] as string;
+      const tenantId = this.resolveTenantId(req);
       const { doctorId, startDate, endDate, durationMinutes = 30 } = req.query;
 
       if (!doctorId || !startDate) {

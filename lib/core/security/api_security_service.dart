@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'encryption_service.dart';
@@ -178,7 +179,8 @@ class ApiSecurityService {
   /// Validate input data to prevent injection attacks
   bool _validateRequest(String url, String method, Map<String, dynamic>? body) {
     // URL validation
-    if (!Uri.tryParse(url)?.hasAbsolutePath ?? true) {
+    final parsed = Uri.tryParse(url);
+    if (parsed == null || !parsed.hasAbsolutePath) {
       return false;
     }
 
@@ -344,8 +346,8 @@ class ApiSecurityService {
   /// Sanitize user input
   String sanitizeInput(String input) {
     return input
-        .replaceAll(RegExp(r'<[^>]*>'), '') // Remove HTML tags
-        .replaceAll(RegExp(r'[<>"\']'), '') // Remove dangerous characters
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll(RegExp('[<>"\']'), '')
         .trim();
   }
 

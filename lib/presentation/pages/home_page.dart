@@ -312,7 +312,7 @@ class AppointmentsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(AppLocalizations.of(context).appointments)),
-      body: const Center(child: Text('Appointments Page')),
+      body: const Center(child: Text('דף תורים')),
     );
   }
 }
@@ -324,7 +324,7 @@ class DoctorsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(AppLocalizations.of(context).doctors)),
-      body: const Center(child: Text('Doctors Page')),
+      body: const Center(child: Text('דף רופאים')),
     );
   }
 }
@@ -336,7 +336,7 @@ class PatientsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(AppLocalizations.of(context).patients)),
-      body: const Center(child: Text('Patients Page')),
+      body: const Center(child: Text('דף מטופלים')),
     );
   }
 }
@@ -348,7 +348,7 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(AppLocalizations.of(context).profile)),
-      body: const Center(child: Text('Profile Page')),
+      body: const Center(child: Text('דף פרופיל')),
     );
   }
 }
@@ -360,7 +360,7 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(AppLocalizations.of(context).settings)),
-      body: const Center(child: Text('Settings Page')),
+      body: const Center(child: Text('דף הגדרות')),
     );
   }
 }

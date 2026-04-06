@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../core/config/app_config.dart';
 
 class NotificationService {
   // Email notification using Nodemailer (backend)
@@ -11,7 +12,7 @@ class NotificationService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/v1/notifications/email'),
+        Uri.parse('${AppConfig.baseUrl.replaceFirst('/api/v1', '')}/api/v1/notifications/email'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'to': to,
@@ -36,7 +37,7 @@ class NotificationService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/v1/notifications/sms'),
+        Uri.parse('${AppConfig.baseUrl.replaceFirst('/api/v1', '')}/api/v1/notifications/sms'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'to': to,
@@ -60,7 +61,7 @@ class NotificationService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/v1/notifications/whatsapp'),
+        Uri.parse('${AppConfig.baseUrl.replaceFirst('/api/v1', '')}/api/v1/notifications/whatsapp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'to': to,
@@ -85,7 +86,7 @@ class NotificationService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/v1/notifications/push'),
+        Uri.parse('${AppConfig.baseUrl.replaceFirst('/api/v1', '')}/api/v1/notifications/push'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'token': token,
@@ -184,19 +185,83 @@ class NotificationService {
     return emailSent || smsSent;
   }
 
-  // Get notifications for user
+  // PD-10: Get notifications for user (system + doctor messages)
   static Future<List<Map<String, dynamic>>> getNotifications() async {
     try {
-      final response = await http.get(
-        Uri.parse('http://localhost:3000/api/v1/notifications'),
+      // Fetch system notifications
+      final baseUrl = AppConfig.baseUrl.replaceFirst('/api/v1', '');
+      final systemResponse = await http.get(
+        Uri.parse('$baseUrl/api/v1/notifications'),
         headers: {'Content-Type': 'application/json'},
       );
       
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['notifications'] ?? []);
+      List<Map<String, dynamic>> notifications = [];
+      
+      if (systemResponse.statusCode == 200) {
+        final systemData = jsonDecode(systemResponse.body);
+        final rawNotifications = List<Map<String, dynamic>>.from(
+          systemData['data']?['notifications'] ?? systemData['notifications'] ?? []
+        );
+        
+        // Map notifications and extract category from data field
+        for (var notif in rawNotifications) {
+          final data = notif['data'];
+          String? category;
+          if (data is Map) {
+            category = data['category']?.toString();
+          }
+          
+          notifications.add({
+            'id': notif['id'] ?? '',
+            'type': category ?? notif['type'] ?? 'system', // Use category from data, fallback to type
+            'title': notif['title'] ?? '',
+            'message': notif['message'] ?? '',
+            'createdAt': notif['created_at'] ?? notif['createdAt'] ?? DateTime.now().toIso8601String(),
+            'isRead': notif['is_read'] ?? notif['isRead'] ?? false,
+            'status': notif['status'] ?? 'sent',
+          });
+        }
       }
-      return [];
+      
+      // PD-10: Fetch doctor/therapist messages
+      try {
+        final messagesResponse = await http.get(
+          Uri.parse('${AppConfig.baseUrl.replaceFirst('/api/v1', '')}/api/v1/messages'),
+          headers: {'Content-Type': 'application/json'},
+        );
+        
+        if (messagesResponse.statusCode == 200) {
+          final messagesData = jsonDecode(messagesResponse.body);
+          final messages = List<Map<String, dynamic>>.from(messagesData['messages'] ?? []);
+          
+          // Convert doctor messages to notification format
+          for (var message in messages) {
+            notifications.add({
+              'id': message['id'] ?? '',
+              'type': 'doctor_message',
+              'title': 'הודעה מ${message['doctor_name'] ?? 'רופא'}',
+              'message': message['content'] ?? message['message'] ?? '',
+              'createdAt': message['created_at'] ?? message['createdAt'] ?? DateTime.now().toIso8601String(),
+              'isRead': message['is_read'] ?? message['isRead'] ?? false,
+              'source': 'doctor',
+              'doctorId': message['doctor_id'] ?? message['doctorId'],
+              'doctorName': message['doctor_name'] ?? message['doctorName'],
+            });
+          }
+        }
+      } catch (e) {
+        // Silently fail if messages endpoint doesn't exist yet
+        print('Doctor messages endpoint not available: $e');
+      }
+      
+      // Sort by creation date (newest first)
+      notifications.sort((a, b) {
+        final dateA = DateTime.tryParse(a['createdAt'] ?? '') ?? DateTime(1970);
+        final dateB = DateTime.tryParse(b['createdAt'] ?? '') ?? DateTime(1970);
+        return dateB.compareTo(dateA);
+      });
+      
+      return notifications;
     } catch (e) {
       print('Error fetching notifications: $e');
       return [];
@@ -207,7 +272,7 @@ class NotificationService {
   static Future<bool> markAsRead(String notificationId) async {
     try {
       final response = await http.put(
-        Uri.parse('http://localhost:3000/api/v1/notifications/$notificationId/read'),
+        Uri.parse('${AppConfig.baseUrl.replaceFirst('/api/v1', '')}/api/v1/notifications/$notificationId/read'),
         headers: {'Content-Type': 'application/json'},
       );
       

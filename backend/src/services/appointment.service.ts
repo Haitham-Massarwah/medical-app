@@ -2,8 +2,7 @@ import db from '../config/database';
 import redis from '../config/redis';
 import { logger } from '../config/logger';
 import { ApiError } from '../utils/apiError';
-import { addMinutes, parseISO, format, isAfter, isBefore, isWithinInterval } from 'date-fns';
-import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
+import { addMinutes, format, isAfter, isBefore } from 'date-fns';
 
 interface BookAppointmentParams {
   tenantId: string;
@@ -270,7 +269,7 @@ export class AppointmentService {
 
     // Generate available slots
     const availableSlots: Date[] = [];
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
 
     while (isBefore(currentDate, endDateOrDefault)) {
       const dayOfWeek = currentDate.getDay();
@@ -467,6 +466,46 @@ export class AppointmentService {
   }
 
   /**
+   * Update appointment (status, notes, etc.)
+   */
+  public async updateAppointment(
+    appointmentId: string,
+    tenantId: string,
+    userId: string,
+    updates: { status?: string; notes?: string }
+  ): Promise<any> {
+    return await db.transaction(async (trx) => {
+      const updateData: any = {
+        updated_at: new Date(),
+      };
+
+      if (updates.status) {
+        updateData.status = updates.status;
+      }
+      if (updates.notes !== undefined) {
+        updateData.notes = updates.notes;
+      }
+
+      const [updated] = await trx('appointments')
+        .where({ id: appointmentId, tenant_id: tenantId })
+        .update(updateData)
+        .returning('*');
+
+      // Log audit
+      await trx('audit_logs').insert({
+        tenant_id: tenantId,
+        user_id: userId,
+        action: 'UPDATE',
+        entity_type: 'appointment',
+        entity_id: appointmentId,
+        new_values: updateData,
+      });
+
+      return updated;
+    });
+  }
+
+  /**
    * Mark appointment as no-show
    */
   public async markNoShow(appointmentId: string, tenantId: string, userId: string): Promise<void> {
@@ -497,11 +536,58 @@ export class AppointmentService {
 
     let query = db('appointments').where({ tenant_id: tenantId });
 
+    // Admin / Developer / Receptionist (SRS Rev 02): tenant-wide appointment context
+    if (role === 'admin' || role === 'developer' || role === 'receptionist') {
+      query = query
+        .leftJoin('doctors', 'appointments.doctor_id', 'doctors.id')
+        .leftJoin('users as doctor_users', 'doctors.user_id', 'doctor_users.id')
+        .leftJoin('patients', 'appointments.patient_id', 'patients.id')
+        .leftJoin('users as patient_users', 'patients.user_id', 'patient_users.id')
+        .select(
+          'appointments.*',
+          db.raw(
+            "TRIM(CONCAT(COALESCE(doctor_users.first_name, ''), ' ', COALESCE(doctor_users.last_name, ''))) as doctorName"
+          ),
+          db.raw(
+            "TRIM(CONCAT(COALESCE(patient_users.first_name, ''), ' ', COALESCE(patient_users.last_name, ''))) as patientName"
+          ),
+          'doctors.specialty as specialty'
+        );
+    }
+
     // Apply role-based filters
     if (role === 'patient') {
-      query = query.where({ patient_id: userId });
+      let patient = await db('patients')
+        .where({ user_id: userId, tenant_id: tenantId })
+        .first();
+      if (!patient && userId) {
+        patient = await db('patients')
+          .where({ user_id: userId })
+          .first();
+      }
+      if (!patient) {
+        return { data: [], page, limit, total: 0 };
+      }
+      if (patient.tenant_id && patient.tenant_id !== tenantId) {
+        query = db('appointments').where({ tenant_id: patient.tenant_id });
+      }
+      query = query.where({ patient_id: patient.id });
     } else if (role === 'doctor' || role === 'paramedical') {
-      query = query.where({ doctor_id: userId });
+      let doctor = await db('doctors')
+        .where({ user_id: userId, tenant_id: tenantId })
+        .first();
+      if (!doctor && userId) {
+        doctor = await db('doctors')
+          .where({ user_id: userId })
+          .first();
+      }
+      if (!doctor) {
+        return { data: [], page, limit, total: 0 };
+      }
+      if (doctor.tenant_id && doctor.tenant_id !== tenantId) {
+        query = db('appointments').where({ tenant_id: doctor.tenant_id });
+      }
+      query = query.where({ doctor_id: doctor.id });
     }
 
     // Apply filters
@@ -522,7 +608,7 @@ export class AppointmentService {
     }
 
     // Get total count
-    const [{ count }] = await query.clone().count('* as count');
+    const [{ count }] = await query.clone().clearSelect().count('* as count');
 
     // Get paginated data
     const data = await query
@@ -546,9 +632,21 @@ export class AppointmentService {
 
     // Apply role-based access
     if (role === 'patient') {
-      query = query.where({ patient_id: userId });
+      const patient = await db('patients')
+        .where({ user_id: userId, tenant_id: tenantId })
+        .first();
+      if (!patient) {
+        return null;
+      }
+      query = query.where({ patient_id: patient.id });
     } else if (role === 'doctor' || role === 'paramedical') {
-      query = query.where({ doctor_id: userId });
+      const doctor = await db('doctors')
+        .where({ user_id: userId, tenant_id: tenantId })
+        .first();
+      if (!doctor) {
+        return null;
+      }
+      query = query.where({ doctor_id: doctor.id });
     }
 
     const appointment = await query.first();
@@ -610,5 +708,53 @@ export class AppointmentService {
     } catch (error) {
       logger.error('Error clearing appointment cache:', error);
     }
+  }
+
+  /**
+   * AI no-show prediction: compute risk score for an appointment (heuristic-based).
+   * Returns risk level and score 0-100. Replace with ML model in production.
+   */
+  public async getNoShowRisk(appointmentId: string, tenantId: string): Promise<{ risk: 'low' | 'medium' | 'high'; score: number; factors: string[] }> {
+    const factors: string[] = [];
+    let score = 20; // base
+
+    const appointment = await db('appointments')
+      .where({ id: appointmentId, tenant_id: tenantId })
+      .first();
+    if (!appointment) {
+      return { risk: 'low', score: 0, factors: ['Appointment not found'] };
+    }
+
+    const appointmentDate = new Date(appointment.appointment_date);
+    const hoursUntil = (appointmentDate.getTime() - Date.now()) / (1000 * 60 * 60);
+
+    if (hoursUntil < 24) factors.push('Less than 24h until appointment');
+    if (hoursUntil < 2) {
+      score += 25;
+      factors.push('Within 2 hours');
+    } else if (hoursUntil < 24) {
+      score += 10;
+    }
+
+    const patientId = appointment.patient_id;
+    const pastNoShows = await db('appointments')
+      .where({ patient_id: patientId, tenant_id: tenantId, status: 'no_show' })
+      .count('id as count')
+      .first();
+    const noShowCount = Number((pastNoShows as any)?.count || 0);
+    if (noShowCount > 0) {
+      score += Math.min(noShowCount * 15, 35);
+      factors.push(`Patient has ${noShowCount} past no-show(s)`);
+    }
+
+    const dayOfWeek = appointmentDate.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      score += 10;
+      factors.push('Weekend appointment');
+    }
+
+    score = Math.min(100, Math.max(0, score));
+    const risk: 'low' | 'medium' | 'high' = score >= 60 ? 'high' : score >= 35 ? 'medium' : 'low';
+    return { risk, score, factors };
   }
 }

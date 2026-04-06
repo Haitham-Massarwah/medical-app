@@ -23,6 +23,16 @@ router.get(
 );
 
 /**
+ * @route   GET /api/v1/analytics/admin-health
+ * @desc    Admin health summary (integrations + recent audit)
+ * @access  Private/Admin
+ */
+router.get(
+  '/admin-health',
+  analyticsController.getAdminHealth
+);
+
+/**
  * @route   GET /api/v1/analytics/appointments
  * @desc    Get appointment analytics
  * @access  Private/Admin

@@ -3,7 +3,8 @@ import db from '../config/database';
 
 export interface CalendarTokens {
   id?: number;
-  user_id: number;
+  // NOTE: user IDs in this system are UUID strings (users.id)
+  user_id: string;
   provider: 'google' | 'outlook';
   access_token: string;
   refresh_token?: string;
@@ -67,7 +68,7 @@ class CalendarService {
   /**
    * Save calendar tokens to database
    */
-  async saveTokens(userId: number, provider: 'google' | 'outlook', tokens: CalendarTokens): Promise<void> {
+  async saveTokens(userId: string, provider: 'google' | 'outlook', tokens: CalendarTokens): Promise<void> {
     try {
       // Check if tokens already exist
       const existing = await db('calendar_tokens')
@@ -104,7 +105,7 @@ class CalendarService {
   /**
    * Get calendar tokens for a user
    */
-  async getTokens(userId: number, provider: 'google' | 'outlook'): Promise<CalendarTokens | null> {
+  async getTokens(userId: string, provider: 'google' | 'outlook'): Promise<CalendarTokens | null> {
     try {
       const tokens = await db('calendar_tokens')
         .where({ user_id: userId, provider })
@@ -166,7 +167,7 @@ class CalendarService {
   /**
    * Get valid access token (refresh if needed)
    */
-  async getValidAccessToken(userId: number, provider: 'google' | 'outlook'): Promise<string | null> {
+  async getValidAccessToken(userId: string, provider: 'google' | 'outlook'): Promise<string | null> {
     try {
       const tokens = await this.getTokens(userId, provider);
       if (!tokens) return null;
@@ -201,7 +202,7 @@ class CalendarService {
   /**
    * Delete calendar tokens
    */
-  async disconnectCalendar(userId: number, provider: 'google' | 'outlook'): Promise<void> {
+  async disconnectCalendar(userId: string, provider: 'google' | 'outlook'): Promise<void> {
     try {
       await db('calendar_tokens')
         .where({ user_id: userId, provider })
@@ -214,7 +215,7 @@ class CalendarService {
   /**
    * Get calendar connection status
    */
-  async getConnectionStatus(userId: number): Promise<{ google: boolean; outlook: boolean }> {
+  async getConnectionStatus(userId: string): Promise<{ google: boolean; outlook: boolean }> {
     try {
       const tokens = await db('calendar_tokens')
         .where({ user_id: userId })
@@ -231,4 +232,8 @@ class CalendarService {
 }
 
 export default new CalendarService();
+
+
+
+
 

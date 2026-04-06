@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../features/payments/data/models/payment_models.dart';
 import '../core/security/payment_security_service.dart';
-import '../core/security/audit_logging_service.dart';
+import '../core/security/audit_logging_service_stub.dart'
+    if (dart.library.io) '../core/security/audit_logging_service.dart';
 
 class VisaMastercardPaymentService {
   static const String _baseUrl = 'https://api.visa.com';

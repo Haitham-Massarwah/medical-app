@@ -2,8 +2,8 @@ import { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable('calendar_tokens', (table) => {
-    table.increments('id').primary();
-    table.integer('user_id').unsigned().notNullable();
+    table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
+    table.uuid('user_id').notNullable();
     table.enu('provider', ['google', 'outlook']).notNullable();
     table.text('access_token').notNullable();
     table.text('refresh_token').nullable();
@@ -24,4 +24,8 @@ export async function up(knex: Knex): Promise<void> {
 export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('calendar_tokens');
 }
+
+
+
+
 

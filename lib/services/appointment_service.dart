@@ -2,6 +2,20 @@ import '../core/network/http_client.dart';
 
 class AppointmentService {
   final HttpClient _httpClient = HttpClient();
+  
+  List<DateTime> _parseSlotDates(dynamic data) {
+    if (data is! List) return [];
+    return data
+        .map((item) => DateTime.tryParse(item.toString()))
+        .whereType<DateTime>()
+        .toList();
+  }
+  
+  String _formatTime(DateTime dateTime) {
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
 
   /// Get available dates for a doctor in a date range
   Future<List<DateTime>> getAvailableDates(
@@ -11,7 +25,7 @@ class AppointmentService {
   ) async {
     try {
       final response = await _httpClient.get(
-        '/appointments/available-dates',
+        '/appointments/available-slots',
         queryParameters: {
           'doctorId': doctorId,
           'startDate': startDate.toIso8601String(),
@@ -19,20 +33,16 @@ class AppointmentService {
         },
       );
 
-      final List<dynamic> dates = response['data']?['dates'] ?? [];
-      return dates.map((d) => DateTime.parse(d)).toList();
-    } catch (e) {
-      // Return mock data on error
-      final mockDates = <DateTime>[];
-      for (int i = 1; i <= 30; i++) {
-        final date = DateTime.now().add(Duration(days: i));
-        if (date.weekday != 5 && date.weekday != 6) {
-          if (date.isAfter(startDate) && date.isBefore(endDate)) {
-            mockDates.add(DateTime(date.year, date.month, date.day));
-          }
-        }
+      final slots = _parseSlotDates(response['data']);
+      final uniqueDates = <DateTime>{};
+      for (final slot in slots) {
+        uniqueDates.add(DateTime(slot.year, slot.month, slot.day));
       }
-      return mockDates;
+      final result = uniqueDates.toList()..sort((a, b) => a.compareTo(b));
+      return result;
+    } catch (e) {
+      // Do not return mock data; surface empty list
+      return [];
     }
   }
 
@@ -42,43 +52,47 @@ class AppointmentService {
     DateTime date,
   ) async {
     try {
+      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
       final response = await _httpClient.get(
         '/appointments/available-slots',
         queryParameters: {
           'doctorId': doctorId,
           'startDate': date.toIso8601String(),
+          'endDate': endOfDay.toIso8601String(),
         },
       );
 
-      final List<dynamic> slots = response['data']?['slots'] ?? [];
-      return slots.map((s) => s['time'].toString()).toList();
+      final slots = _parseSlotDates(response['data']);
+      final filtered = slots.where((slot) =>
+          slot.year == date.year &&
+          slot.month == date.month &&
+          slot.day == date.day);
+      final times = filtered.map(_formatTime).toSet().toList()
+        ..sort();
+      return times;
     } catch (e) {
-      // Return mock time slots
-      return [
-        '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-        '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
-      ];
+      // Do not return mock data; surface empty list
+      return [];
     }
   }
 
-  /// Book an appointment
+  /// Book an appointment. When doctor books for a patient, pass patientId.
   Future<Map<String, dynamic>> bookAppointment({
     required String doctorId,
     required DateTime appointmentDate,
     required String timeSlot,
     String? notes,
+    String? patientId,
   }) async {
     try {
-      final response = await _httpClient.post(
-        '/appointments',
-        {
-          'doctorId': doctorId,
-          'appointmentDate': appointmentDate.toIso8601String(),
-          'timeSlot': timeSlot,
-          'notes': notes,
-        },
-      );
-
+      final body = <String, dynamic>{
+        'doctorId': doctorId,
+        'appointmentDate': appointmentDate.toIso8601String(),
+        'timeSlot': timeSlot,
+        if (notes != null) 'notes': notes,
+        if (patientId != null) 'patientId': patientId,
+      };
+      final response = await _httpClient.post('/appointments', body);
       return response;
     } catch (e) {
       throw Exception('Failed to book appointment: $e');
@@ -89,30 +103,17 @@ class AppointmentService {
   Future<List<Map<String, dynamic>>> getAppointments() async {
     try {
       final response = await _httpClient.get('/appointments');
-      final List<dynamic> appointments = response['data']?['appointments'] ?? [];
+      final data = response['data'];
+      if (data is List) {
+        return List<Map<String, dynamic>>.from(data);
+      }
+      final List<dynamic> appointments = data?['appointments'] ?? [];
       return appointments.map((a) => a as Map<String, dynamic>).toList();
     } catch (e) {
-      // Return mock appointments
-      return [
-        {
-          'id': '1',
-          'doctorName': 'ד"ר יוסי כהן',
-          'specialty': 'רופא משפחה',
-          'date': DateTime.now().add(const Duration(days: 3)).toIso8601String(),
-          'time': '10:00',
-          'status': 'scheduled',
-          'location': 'תל אביב',
-        },
-        {
-          'id': '2',
-          'doctorName': 'ד"ר שרה לוי',
-          'specialty': 'רופאת ילדים',
-          'date': DateTime.now().add(const Duration(days: 7)).toIso8601String(),
-          'time': '14:30',
-          'status': 'confirmed',
-          'location': 'ירושלים',
-        },
-      ];
+      // Do not return mock/placeholder data; surface an empty list instead
+      // so new users never see fake appointments.
+      print('Failed to load appointments: $e');
+      return [];
     }
   }
 
@@ -128,19 +129,68 @@ class AppointmentService {
   /// Reschedule appointment
   Future<void> rescheduleAppointment({
     required String appointmentId,
-    required DateTime newDate,
-    required String newTimeSlot,
+    required DateTime newDateTime,
   }) async {
     try {
-      await _httpClient.put(
+      await _httpClient.post(
         '/appointments/$appointmentId/reschedule',
         {
-          'newAppointmentDate': newDate.toIso8601String(),
-          'newTimeSlot': newTimeSlot,
+          'newAppointmentDate': newDateTime.toIso8601String(),
         },
       );
     } catch (e) {
       throw Exception('Failed to reschedule appointment: $e');
+    }
+  }
+
+  /// Confirm appointment
+  Future<void> confirmAppointment(String appointmentId) async {
+    try {
+      await _httpClient.post('/appointments/$appointmentId/confirm', {});
+    } catch (e) {
+      throw Exception('Failed to confirm appointment: $e');
+    }
+  }
+
+  /// Update appointment status
+  Future<void> updateAppointmentStatus(String appointmentId, String status, {String? notes}) async {
+    try {
+      await _httpClient.put(
+        '/appointments/$appointmentId',
+        {
+          'status': status,
+          if (notes != null) 'notes': notes,
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to update appointment status: $e');
+    }
+  }
+
+  /// Complete appointment (mark as finished)
+  Future<void> completeAppointment(String appointmentId, {String? summary}) async {
+    try {
+      await _httpClient.put(
+        '/appointments/$appointmentId',
+        {
+          'status': 'completed',
+          if (summary != null) 'notes': summary,
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to complete appointment: $e');
+    }
+  }
+
+  /// Get AI no-show risk prediction for an appointment
+  Future<Map<String, dynamic>> getNoShowRisk(String appointmentId) async {
+    try {
+      final response = await _httpClient.get('/appointments/$appointmentId/no-show-risk');
+      final data = response['data'];
+      if (data is Map<String, dynamic>) return data;
+      return {'risk': 'low', 'score': 0, 'factors': <String>[]};
+    } catch (e) {
+      return {'risk': 'low', 'score': 0, 'factors': <String>[]};
     }
   }
 }

@@ -39,6 +39,13 @@ import testRoutes from './routes/test.routes';
 import treatmentRoutes from './routes/treatment.routes';
 import invitationRoutes from './routes/invitation.routes';
 import adminRoutes from './routes/admin.routes';
+import permissionsRoutes from './routes/permissions.routes';
+import labRoutes from './routes/lab.routes';
+import insuranceRoutes from './routes/insurance.routes';
+import formsRoutes from './routes/forms.routes';
+import crmRoutes from './routes/crm.routes';
+import financeRoutes from './routes/finance.routes';
+import integrationRoutes from './routes/integration.routes';
 
 const app: Application = express();
 const httpServer = createServer(app);
@@ -81,6 +88,18 @@ app.use(`/api/${API_VERSION}/test`, testRoutes);
 app.use(`/api/${API_VERSION}/treatments`, treatmentRoutes);
 app.use(`/api/${API_VERSION}/invitations`, invitationRoutes);
 app.use(`/api/${API_VERSION}/admin`, adminRoutes);
+app.use(`/api/${API_VERSION}/permissions`, permissionsRoutes);
+app.use(`/api/${API_VERSION}/lab`, labRoutes);
+app.use(`/api/${API_VERSION}/insurance`, insuranceRoutes);
+app.use(`/api/${API_VERSION}/forms`, formsRoutes);
+app.use(`/api/${API_VERSION}/crm`, crmRoutes);
+app.use(`/api/${API_VERSION}/finance`, financeRoutes);
+app.use(`/api/${API_VERSION}/integrations`, integrationRoutes);
+
+// Root redirect to frontend
+app.get('/', (_req, res) => {
+  res.redirect('http://localhost:8081');
+});
 
 // 404 handler
 app.use((req, res) => {

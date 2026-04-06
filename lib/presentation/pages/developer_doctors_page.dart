@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+
 import '../../services/api_service.dart';
+import 'doctor_detail_management_page.dart';
 
 class DeveloperDoctorsPage extends StatefulWidget {
   const DeveloperDoctorsPage({super.key});
@@ -37,53 +40,15 @@ class _DeveloperDoctorsPageState extends State<DeveloperDoctorsPage> {
         throw Exception(response['message'] ?? 'Failed to load doctors');
       }
     } catch (e) {
-      // If API fails, show sample data so page isn't blank
       setState(() {
-        _doctors = [
-          {
-            'id': '1',
-            'name': 'ד"ר אברהם כהן',
-            'email': 'doctor@test.com',
-            'phone': '050-1111111',
-            'specialty': 'רופא משפחה',
-            'licenseNumber': '12345',
-            'is_active': true,
-            'address': 'תל אביב, רחוב רוטשילד 23',
-            'totalPatients': 45,
-            'totalAppointments': 123,
-          },
-          {
-            'id': '2',
-            'name': 'ד"ר שרה לוי',
-            'email': 'sara.doctor@test.com',
-            'phone': '052-2222222',
-            'specialty': 'קרדיולוג',
-            'licenseNumber': '67890',
-            'is_active': true,
-            'address': 'ירושלים, רחוב יפו 35',
-            'totalPatients': 67,
-            'totalAppointments': 234,
-          },
-          {
-            'id': '3',
-            'name': 'ד"ר דוד ישראלי',
-            'email': 'david.doctor@test.com',
-            'phone': '054-3333333',
-            'specialty': 'אורתופד',
-            'licenseNumber': '11111',
-            'is_active': true,
-            'address': 'חיפה, שדרות המגינים 47',
-            'totalPatients': 52,
-            'totalAppointments': 189,
-          },
-        ];
+        _doctors = [];
         _isLoading = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('מציג נתונים לדוגמה (שגיאת API: $e)'),
-            backgroundColor: Colors.orange,
+            content: Text('שגיאה בטעינת רופאים מהשרת: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -108,8 +73,11 @@ class _DeveloperDoctorsPageState extends State<DeveloperDoctorsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context);
+    final isRTL = locale.languageCode == 'he' || locale.languageCode == 'ar';
+
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: isRTL ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('ניהול רופאים'),
@@ -363,7 +331,12 @@ class _DeveloperDoctorsPageState extends State<DeveloperDoctorsPage> {
         await _inviteCustomerFlow(doctor);
         break;
       case 'view':
-        _showDoctorDetails(doctor);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DoctorDetailManagementPage(doctor: doctor),
+          ),
+        );
         break;
       case 'delete':
         await _deleteDoctor(doctor);

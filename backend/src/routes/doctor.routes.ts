@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { DoctorController } from '../controllers/doctor.controller';
+import { DoctorSMSController } from '../controllers/doctor-sms.controller';
+import { DoctorSMSTemplatesController } from '../controllers/doctor-sms-templates.controller';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth.middleware';
 import { validateRequest, validatePagination, validateUUID } from '../middleware/validator';
 import { tenantContext } from '../middleware/tenantContext';
 
 const router = Router();
 const doctorController = new DoctorController();
+const doctorSMSController = new DoctorSMSController();
+const doctorSMSTemplatesController = new DoctorSMSTemplatesController();
 
 /**
  * @route   GET /api/v1/doctors
@@ -33,12 +37,24 @@ router.get(
 );
 
 /**
+ * @route   GET /api/v1/doctors/me
+ * @desc    Get current doctor's profile
+ * @access  Private/Doctor
+ */
+router.get(
+  '/me',
+  authenticate,
+  tenantContext,
+  doctorController.getMyDoctorProfile
+);
+
+/**
  * @route   GET /api/v1/doctors/:id
  * @desc    Get doctor by ID
  * @access  Public
  */
 router.get(
-  '/:id',
+  '/:id([0-9a-fA-F-]{36})',
   optionalAuth,
   validateUUID('id'),
   doctorController.getDoctorById
@@ -50,7 +66,7 @@ router.get(
  * @access  Public
  */
 router.get(
-  '/:id/availability',
+  '/:id([0-9a-fA-F-]{36})/availability',
   optionalAuth,
   validateUUID('id'),
   doctorController.getDoctorAvailability
@@ -62,7 +78,7 @@ router.get(
  * @access  Public
  */
 router.get(
-  '/:id/reviews',
+  '/:id([0-9a-fA-F-]{36})/reviews',
   optionalAuth,
   validateUUID('id'),
   validatePagination,
@@ -86,8 +102,12 @@ router.post(
     body('specialty').trim().notEmpty().withMessage('Specialty required').optional(),
     body('license_number').trim().notEmpty().withMessage('License number required'),
     body('bio').optional().trim(),
-    body('education').optional().isArray(),
-    body('certifications').optional().isArray(),
+    body('education')
+      .optional()
+      .custom((value) => Array.isArray(value) || typeof value === 'string'),
+    body('certifications')
+      .optional()
+      .custom((value) => Array.isArray(value) || typeof value === 'string'),
     body('languages').optional().isArray(),
   ]),
   doctorController.createDoctor
@@ -99,15 +119,19 @@ router.post(
  * @access  Private/Doctor/Admin
  */
 router.put(
-  '/:id',
+  '/:id([0-9a-fA-F-]{36})',
   authorize('doctor', 'admin', 'developer'),
   validateUUID('id'),
   validateRequest([
     body('specialty').optional().trim().notEmpty(),
     body('license_number').optional().trim().notEmpty(),
     body('bio').optional().trim(),
-    body('education').optional().isArray(),
-    body('certifications').optional().isArray(),
+    body('education')
+      .optional()
+      .custom((value) => Array.isArray(value) || typeof value === 'string'),
+    body('certifications')
+      .optional()
+      .custom((value) => Array.isArray(value) || typeof value === 'string'),
     body('languages').optional().isArray(),
   ]),
   doctorController.updateDoctor
@@ -119,7 +143,7 @@ router.put(
  * @access  Private/Doctor/Admin
  */
 router.put(
-  '/:id/schedule',
+  '/:id([0-9a-fA-F-]{36})/schedule',
   authorize('doctor', 'admin', 'developer'),
   validateUUID('id'),
   validateRequest([
@@ -137,7 +161,7 @@ router.put(
  * @access  Private/Doctor/Admin
  */
 router.post(
-  '/:id/time-off',
+  '/:id([0-9a-fA-F-]{36})/time-off',
   authorize('doctor', 'admin', 'developer'),
   validateUUID('id'),
   validateRequest([
@@ -154,7 +178,7 @@ router.post(
  * @access  Private/Admin
  */
 router.delete(
-  '/:id',
+  '/:id([0-9a-fA-F-]{36})',
   authorize('admin', 'developer'),
   validateUUID('id'),
   doctorController.deleteDoctor
@@ -166,7 +190,7 @@ router.delete(
  * @access  Private/Doctor/Admin
  */
 router.get(
-  '/:id/appointments',
+  '/:id([0-9a-fA-F-]{36})/appointments',
   authorize('doctor', 'admin', 'developer'),
   validateUUID('id'),
   validatePagination,
@@ -179,10 +203,132 @@ router.get(
  * @access  Private/Doctor/Admin
  */
 router.get(
-  '/:id/statistics',
+  '/:id([0-9a-fA-F-]{36})/statistics',
   authorize('doctor', 'admin', 'developer'),
   validateUUID('id'),
   doctorController.getDoctorStatistics
+);
+
+/**
+ * @route   GET /api/v1/doctors/:doctorId/sms/settings
+ * @desc    Get doctor SMS settings
+ * @access  Private/Doctor/Admin
+ */
+router.get(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/settings',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  doctorSMSController.getSMSSettings
+);
+
+/**
+ * @route   PUT /api/v1/doctors/:doctorId/sms/settings
+ * @desc    Update doctor SMS settings
+ * @access  Private/Doctor/Admin
+ * @note    Only admin/developer can enable/disable SMS. Doctors can update preferences only.
+ */
+router.put(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/settings',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  validateRequest([
+    body('sms_enabled').optional().isBoolean(), // Admin/Developer only
+    body('send_appointment_reminders').optional().isBoolean(),
+    body('send_appointment_confirmations').optional().isBoolean(),
+    body('send_appointment_cancellations').optional().isBoolean(),
+    body('send_payment_receipts').optional().isBoolean(),
+    body('monthly_limit').optional().isNumeric(),
+    body('auto_recharge').optional().isBoolean(),
+    body('auto_recharge_amount').optional().isNumeric(),
+    body('low_balance_threshold').optional().isNumeric(),
+    body('has_discount').optional().isBoolean(), // Admin/Developer only - Enable/disable discount
+    body('discount_percentage').optional().isFloat({ min: 0, max: 100 }).withMessage('Discount percentage must be between 0 and 100'), // Admin/Developer only
+  ]),
+  doctorSMSController.updateSMSSettings
+);
+
+/**
+ * @route   POST /api/v1/doctors/:doctorId/sms/recharge
+ * @desc    Recharge doctor SMS balance
+ * @access  Private/Doctor/Admin
+ */
+router.post(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/recharge',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  validateRequest([
+    body('amount').isNumeric().withMessage('Amount must be a number').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
+    body('payment_method').optional().isString(),
+    body('payment_reference').optional().isString(),
+  ]),
+  doctorSMSController.rechargeBalance
+);
+
+/**
+ * @route   GET /api/v1/doctors/:doctorId/sms/usage
+ * @desc    Get doctor SMS usage history
+ * @access  Private/Doctor/Admin
+ */
+router.get(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/usage',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  validatePagination,
+  doctorSMSController.getUsageHistory
+);
+
+/**
+ * @route   GET /api/v1/doctors/:doctorId/sms/billing
+ * @desc    Get doctor SMS billing history
+ * @access  Private/Doctor/Admin
+ */
+router.get(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/billing',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  validatePagination,
+  doctorSMSController.getBillingHistory
+);
+
+/**
+ * @route   GET /api/v1/doctors/:doctorId/sms/templates
+ * @desc    Get doctor SMS templates (custom + defaults)
+ * @access  Private/Doctor/Admin
+ */
+router.get(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/templates',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  doctorSMSTemplatesController.getTemplates
+);
+
+/**
+ * @route   PUT /api/v1/doctors/:doctorId/sms/templates
+ * @desc    Update doctor SMS template
+ * @access  Private/Doctor/Admin
+ */
+router.put(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/templates',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  validateRequest([
+    body('language').isIn(['he', 'ar', 'en']).withMessage('Language must be: he, ar, or en'),
+    body('smsType').isIn(['reminder', 'confirmation', 'cancellation', 'payment', 'verification', 'general']).withMessage('SMS type must be: reminder, confirmation, cancellation, payment, verification, or general'),
+    body('template').isString().notEmpty().withMessage('Template must be a non-empty string'),
+  ]),
+  doctorSMSTemplatesController.updateTemplate
+);
+
+/**
+ * @route   DELETE /api/v1/doctors/:doctorId/sms/templates/:language/:smsType
+ * @desc    Reset template to default
+ * @access  Private/Doctor/Admin
+ */
+router.delete(
+  '/:doctorId([0-9a-fA-F-]{36})/sms/templates/:language/:smsType',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('doctorId'),
+  doctorSMSTemplatesController.resetTemplate
 );
 
 export default router;

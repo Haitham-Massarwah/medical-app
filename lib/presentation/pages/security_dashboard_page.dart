@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/security/audit_logging_service.dart';
 import '../../core/security/security_testing_service.dart';
+import '../widgets/dashboard_sidebar.dart';
+import '../../core/theme/app_colors.dart';
 
 class SecurityDashboardPage extends StatefulWidget {
   const SecurityDashboardPage({super.key});
@@ -212,7 +214,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
         _eventStats = report.eventTypes;
       });
     } catch (e) {
-      _showError('Failed to load security data: $e');
+      _showError('טעינת נתוני האבטחה נכשלה: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -223,30 +225,52 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Security Dashboard'),
-        backgroundColor: Colors.red,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadSecurityData,
-            tooltip: 'Refresh',
-          ),
-          IconButton(
-            icon: const Icon(Icons.security),
-            onPressed: _runSecurityTests,
-            tooltip: 'Run Security Tests',
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+      body: SafeArea(
+        child: Row(
+          children: [
+            // Sidebar
+            const DashboardSidebar(currentRoute: '/security-dashboard', role: 'developer'),
+            
+            // Main Content
+            Expanded(
+              child: Container(
+                color: AppColors.backgroundLight,
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(30),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'לוח אבטחה - Security Dashboard',
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.refresh),
+                                      onPressed: _loadSecurityData,
+                                      tooltip: 'רענן',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.security),
+                                      onPressed: _runSecurityTests,
+                                      tooltip: 'בצע בדיקת אבטחה',
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 30),
                   // FR-19: Security Explanation Card
                   _buildSecurityExplanationCard(),
                   
@@ -272,11 +296,16 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
                   
                   const SizedBox(height: 24),
                   
-                  // Security Test Results
-                  if (_securityReport != null) _buildSecurityTestResults(),
-                ],
+                            // Security Test Results
+                            if (_securityReport != null) _buildSecurityTestResults(),
+                          ],
+                        ),
+                      ),
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -379,7 +408,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
             const SizedBox(height: 16),
             if (_securityAlerts.isEmpty)
               const Text(
-                'No security alerts',
+                'אין התראות אבטחה',
                 style: TextStyle(color: Colors.grey),
               )
             else
@@ -434,7 +463,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
               ),
               const Spacer(),
               Text(
-                '${alert.count} occurrences',
+                '${alert.count} מופעים',
                 style: const TextStyle(
                   fontSize: 12,
                   color: Colors.grey,
@@ -448,7 +477,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
             style: const TextStyle(fontSize: 14),
           ),
           Text(
-            'First: ${_formatDateTime(alert.firstOccurrence)}',
+            'ראשון: ${_formatDateTime(alert.firstOccurrence)}',
             style: const TextStyle(
               fontSize: 12,
               color: Colors.grey,
@@ -467,7 +496,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Recent Activity',
+              'פעילות אחרונה',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -476,7 +505,7 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
             const SizedBox(height: 16),
             if (_recentLogs.isEmpty)
               const Text(
-                'No recent activity',
+                'אין פעילות אחרונה',
                 style: TextStyle(color: Colors.grey),
               )
             else
@@ -784,9 +813,9 @@ class _SecurityDashboardPageState extends State<SecurityDashboardPage> {
         _recentLogs = logs;
         _eventStats = auditReport.eventTypes;
       });
-      _showSuccess('Security tests completed and data refreshed');
+      _showSuccess('בדיקות האבטחה הושלמו והנתונים רועננו');
     } catch (e) {
-      _showError('Failed to run security tests: $e');
+      _showError('ביצוע בדיקות האבטחה נכשל: $e');
     } finally {
       setState(() {
         _isLoading = false;

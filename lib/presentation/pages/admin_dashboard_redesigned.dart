@@ -125,7 +125,7 @@ class AdminDashboardPage extends StatelessWidget {
                                     ),
                                     TextButton(
                                       onPressed: () {},
-                                      child: const Text('View All', style: TextStyle(color: AppColors.accentTeal)),
+                                      child: const Text('הצג הכל', style: TextStyle(color: AppColors.accentTeal)),
                                     ),
                                   ],
                                 ),

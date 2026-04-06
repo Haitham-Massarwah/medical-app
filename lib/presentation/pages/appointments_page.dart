@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'reschedule_page.dart';
 import '../../services/waze_service.dart';
+import '../../services/api_service.dart';
 
 class AppointmentsPage extends StatefulWidget {
   const AppointmentsPage({super.key});
@@ -11,55 +12,79 @@ class AppointmentsPage extends StatefulWidget {
 }
 
 class _AppointmentsPageState extends State<AppointmentsPage> {
-    final List<Appointment> _appointments = [
-    Appointment(
-      id: '1',
-      doctorName: 'ד"ר אברהם כהן',
-      specialty: 'רופא משפחה',
-      date: '2024-01-15',
-      time: '09:00',
-      status: 'confirmed',
-      location: 'תל אביב',
-      address: 'תל אביב, רחוב רוטשילד 23',
-      latitude: 32.0553,
-      longitude: 34.7668,
-    ),
-    Appointment(
-      id: '2',
-      doctorName: 'ד"ר שרה לוי',
-      specialty: 'קרדיולוג',
-      date: '2024-01-18',
-      time: '14:30',
-      status: 'pending',
-      location: 'ירושלים',
-      address: 'ירושלים, רחוב יפו 35',
-      latitude: 31.7683,
-      longitude: 35.2137,
-    ),
-    Appointment(
-      id: '3',
-      doctorName: 'ד"ר דוד ישראלי',
-      specialty: 'אורתופד',
-      date: '2024-01-12',
-      time: '11:00',
-      status: 'completed',
-      location: 'חיפה',
-      address: 'חיפה, שדרות המגינים 47',
-      latitude: 32.7940,
-      longitude: 35.0000,
-    ),
-  ];
-
-  String _selectedFilter = 'פעיל'; // Changed default to show active appointments
+  final ApiService _apiService = ApiService();
   final List<String> _filters = ['הכל', 'פעיל', 'מאושר', 'ממתין', 'הושלם', 'בוטל'];
+  List<Appointment> _appointments = [];
+  String _selectedFilter = 'פעיל'; // Changed default to show active appointments
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppointments();
+  }
+
+  Future<void> _loadAppointments() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await _apiService.get('/appointments');
+      if (response['success'] == true) {
+        final dynamic payload = response['data'];
+        final List<dynamic> rows =
+            payload is Map<String, dynamic> && payload['data'] != null
+                ? payload['data'] as List<dynamic>
+                : (payload as List<dynamic>? ?? []);
+
+        setState(() {
+          _appointments = rows.map((row) {
+            final map = row as Map<String, dynamic>;
+            return Appointment(
+              id: (map['id'] ?? '').toString(),
+              doctorId: (map['doctor_id'] ?? map['doctorId'] ?? '').toString(),
+              doctorName: (map['doctor_name'] ?? map['doctorName'] ?? 'לא ידוע').toString(),
+              specialty: (map['doctor_specialty'] ?? map['specialty'] ?? '').toString(),
+              date: (map['appointment_date'] ?? map['date'] ?? '').toString(),
+              time: (map['time'] ?? map['appointment_time'] ?? '').toString(),
+              status: (map['status'] ?? '').toString(),
+              location: (map['location'] ?? '').toString(),
+              address: (map['address'] ?? '').toString(),
+              latitude: map['latitude'] != null ? double.tryParse(map['latitude'].toString()) : null,
+              longitude: map['longitude'] != null ? double.tryParse(map['longitude'].toString()) : null,
+            );
+          }).toList();
+          _errorMessage = null;
+          _isLoading = false;
+        });
+      } else {
+        throw Exception(response['message']);
+      }
+    } catch (e) {
+      setState(() {
+        _appointments = [];
+        _errorMessage = 'לא ניתן לטעון תורים אמיתיים כעת: $e';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Separate active and history appointments
+    final activeAppointments = _appointments.where((apt) => 
+      apt.status == 'pending' || apt.status == 'confirmed'
+    ).toList();
+    
+    final historyAppointments = _appointments.where((apt) => 
+      apt.status == 'completed' || apt.status == 'cancelled'
+    ).toList();
+
     // Filter appointments based on selection
     final filteredAppointments = _selectedFilter == 'הכל'
         ? _appointments
         : _selectedFilter == 'פעיל'
-            ? _appointments.where((apt) => apt.status == 'pending' || apt.status == 'confirmed').toList()
+            ? activeAppointments
             : _appointments.where((apt) => apt.status == _getStatusFromFilter(_selectedFilter)).toList();
 
     return Scaffold(
@@ -73,67 +98,171 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
         ),
         // REMOVED: Add button (Admin view only - no add from here)
       ),
-      body: Column(
-        children: [
-          // Filter
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: DropdownButtonFormField<String>(
-              value: _selectedFilter,
-              decoration: const InputDecoration(
-                labelText: 'סנן לפי סטטוס',
-                border: OutlineInputBorder(),
-              ),
-              items: _filters.map((filter) {
-                return DropdownMenuItem(
-                  value: filter,
-                  child: Text(filter),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedFilter = value!;
-                });
-              },
-            ),
-          ),
-          
-          // Appointments List
-          Expanded(
-            child: filteredAppointments.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.calendar_today, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text(
-                          'אין תורים',
-                          style: TextStyle(fontSize: 18, color: Colors.grey),
-                        ),
-                        Text(
-                          'לחץ על + כדי להוסיף תור חדש',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
-                        ),
-                      ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.redAccent),
+                      textAlign: TextAlign.center,
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filteredAppointments.length,
-                    itemBuilder: (context, index) {
-                      final appointment = filteredAppointments[index];
-                      return AppointmentCard(
-                        appointment: appointment,
-                        onCancel: () => _cancelAppointment(appointment),
-                        onReschedule: () => _rescheduleAppointment(appointment),
-                        onNavigateToWaze: () => _navigateToWaze(appointment),
-                      );
-                    },
                   ),
-          ),
-        ],
-      ),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Filter
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedFilter,
+                          decoration: const InputDecoration(
+                            labelText: 'סנן לפי סטטוס',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _filters.map((filter) {
+                            return DropdownMenuItem(
+                              value: filter,
+                              child: Text(filter),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedFilter = value!;
+                            });
+                          },
+                        ),
+                      ),
+                      
+                      // Active/Upcoming Appointments Section
+                      if (_selectedFilter == 'הכל' || _selectedFilter == 'פעיל')
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Upcoming Appointments',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              activeAppointments.isEmpty
+                                  ? const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(40.0),
+                                        child: Column(
+                                          children: [
+                                            Icon(Icons.calendar_today, size: 64, color: Colors.grey),
+                                            SizedBox(height: 16),
+                                            Text(
+                                              'אין תורים פעילים',
+                                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : Column(
+                                      children: activeAppointments.map((appointment) {
+                                        return AppointmentCard(
+                                          appointment: appointment,
+                                          onCancel: () => _cancelAppointment(appointment),
+                                          onReschedule: () => _rescheduleAppointment(appointment),
+                                          onNavigateToWaze: () => _navigateToWaze(appointment),
+                                        );
+                                      }).toList(),
+                                    ),
+                            ],
+                          ),
+                        ),
+                      
+                      // History Appointments Section
+                      if (_selectedFilter == 'הכל' || _selectedFilter == 'הושלם' || _selectedFilter == 'בוטל')
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 20),
+                              const Text(
+                                'History Appointments',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              historyAppointments.isEmpty
+                                  ? const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(40.0),
+                                        child: Column(
+                                          children: [
+                                            Icon(Icons.history, size: 64, color: Colors.grey),
+                                            SizedBox(height: 16),
+                                            Text(
+                                              'אין תורים בהיסטוריה',
+                                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : Column(
+                                      children: historyAppointments.map((appointment) {
+                                        return AppointmentCard(
+                                          appointment: appointment,
+                                          onCancel: null, // History appointments can't be cancelled
+                                          onReschedule: null, // History appointments can't be rescheduled
+                                          onNavigateToWaze: () => _navigateToWaze(appointment),
+                                        );
+                                      }).toList(),
+                                    ),
+                            ],
+                          ),
+                        ),
+                      
+                      // Filtered List (when specific filter is selected)
+                      if (_selectedFilter != 'הכל' && _selectedFilter != 'פעיל' && _selectedFilter != 'הושלם' && _selectedFilter != 'בוטל')
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: filteredAppointments.isEmpty
+                              ? const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.calendar_today, size: 64, color: Colors.grey),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'אין תורים',
+                                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Column(
+                                  children: filteredAppointments.map((appointment) {
+                                    return AppointmentCard(
+                                      appointment: appointment,
+                                      onCancel: () => _cancelAppointment(appointment),
+                                      onReschedule: () => _rescheduleAppointment(appointment),
+                                      onNavigateToWaze: () => _navigateToWaze(appointment),
+                                    );
+                                  }).toList(),
+                                ),
+                        ),
+                    ],
+                  ),
+                ),
     );
   }
 
@@ -232,6 +361,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
       MaterialPageRoute(
         builder: (context) => ReschedulePage(
           appointmentId: appointment.id,
+          doctorId: appointment.doctorId,
           doctorName: appointment.doctorName,
           specialty: appointment.specialty,
           currentDate: DateTime.parse(appointment.date),
@@ -284,6 +414,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
 
 class Appointment {
   final String id;
+  final String doctorId;
   final String doctorName;
   final String specialty;
   final String date;
@@ -296,6 +427,7 @@ class Appointment {
 
   Appointment({
     required this.id,
+    required this.doctorId,
     required this.doctorName,
     required this.specialty,
     required this.date,
@@ -310,15 +442,15 @@ class Appointment {
 
 class AppointmentCard extends StatelessWidget {
   final Appointment appointment;
-  final VoidCallback onCancel;
-  final VoidCallback onReschedule;
+  final VoidCallback? onCancel;
+  final VoidCallback? onReschedule;
   final VoidCallback? onNavigateToWaze;
 
   const AppointmentCard({
     super.key,
     required this.appointment,
-    required this.onCancel,
-    required this.onReschedule,
+    this.onCancel,
+    this.onReschedule,
     this.onNavigateToWaze,
   });
 
@@ -435,23 +567,27 @@ class AppointmentCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            if (appointment.status == 'confirmed' || appointment.status == 'pending')
+            if ((appointment.status == 'confirmed' || appointment.status == 'pending') && 
+                (onCancel != null || onReschedule != null))
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onReschedule,
-                      child: const Text('דחה תור'),
+                  if (onReschedule != null) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onReschedule,
+                        child: const Text('דחה תור'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: onCancel,
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      child: const Text('בטל תור'),
+                    if (onCancel != null) const SizedBox(width: 8),
+                  ],
+                  if (onCancel != null)
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: onCancel,
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        child: const Text('בטל תור'),
+                      ),
                     ),
-                  ),
                 ],
               ),
           ],

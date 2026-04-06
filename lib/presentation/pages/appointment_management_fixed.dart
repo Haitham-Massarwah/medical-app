@@ -14,54 +14,8 @@ class _AppointmentManagementFixedPageState extends State<AppointmentManagementFi
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  // Mock data for appointments
-  final List<Map<String, dynamic>> _appointments = [
-    {
-      'id': 'APT-001',
-      'patientName': 'אבי כהן',
-      'patientEmail': 'avi.cohen@example.com',
-      'patientPhone': '050-1111111',
-      'doctorName': 'ד"ר יוסי כהן',
-      'doctorSpecialty': 'קרדיולוגיה',
-      'date': '2024-01-20',
-      'time': '10:00',
-      'status': 'scheduled',
-      'treatmentType': 'בדיקה שגרתית',
-      'price': 250,
-      'notes': 'בדיקה שנתית',
-      'createdAt': '2024-01-15 09:30',
-    },
-    {
-      'id': 'APT-002',
-      'patientName': 'מיכל לוי',
-      'patientEmail': 'michal.levi@example.com',
-      'patientPhone': '050-2222222',
-      'doctorName': 'ד"ר שרה לוי',
-      'doctorSpecialty': 'רפואת עיניים',
-      'date': '2024-01-21',
-      'time': '14:30',
-      'status': 'confirmed',
-      'treatmentType': 'בדיקת עיניים',
-      'price': 300,
-      'notes': 'בדיקה מקיפה',
-      'createdAt': '2024-01-16 11:15',
-    },
-    {
-      'id': 'APT-003',
-      'patientName': 'יוסי ישראלי',
-      'patientEmail': 'yossi.israeli@example.com',
-      'patientPhone': '050-3333333',
-      'doctorName': 'ד"ר דוד ישראלי',
-      'doctorSpecialty': 'אורתופדיה',
-      'date': '2024-01-22',
-      'time': '16:00',
-      'status': 'completed',
-      'treatmentType': 'ייעוץ אורתופדי',
-      'price': 280,
-      'notes': 'כאבי גב',
-      'createdAt': '2024-01-17 08:45',
-    },
-  ];
+  // Appointment data will be loaded from API; start empty to avoid placeholders
+  final List<Map<String, dynamic>> _appointments = [];
 
   // Available doctors for filtering
   final List<String> _doctors = [
@@ -841,7 +795,7 @@ class _AppointmentManagementFixedPageState extends State<AppointmentManagementFi
                 const SnackBar(content: Text('תורים יוצאו לקובץ CSV')),
               );
             },
-            child: const Text('CSV'),
+            child: const Text('ייצוא CSV'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -850,7 +804,7 @@ class _AppointmentManagementFixedPageState extends State<AppointmentManagementFi
                 const SnackBar(content: Text('תורים יוצאו לקובץ Excel')),
               );
             },
-            child: const Text('Excel'),
+            child: const Text('ייצוא Excel'),
           ),
         ],
       ),

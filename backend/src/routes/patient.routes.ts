@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { body } from 'express-validator';
 import { PatientController } from '../controllers/patient.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -7,6 +10,59 @@ import { tenantContext } from '../middleware/tenantContext';
 
 const router = Router();
 const patientController = new PatientController();
+
+const allowedFileTypes = [
+  'image/jpeg',
+  'image/png',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'video/mp4',
+  'audio/mpeg',
+];
+
+const allowedExtensions = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.pdf',
+  '.docx',
+  '.mp4',
+  '.mp3',
+];
+
+const storage = multer.diskStorage({
+  destination: (req, _file, cb) => {
+    const { recordId } = req.params as { recordId: string };
+    const uploadPath = path.resolve(process.cwd(), 'uploads', 'medical-records', recordId);
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (_req, file, cb) => {
+    const timestamp = Date.now();
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    cb(null, `${timestamp}-${safeName}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (_req, file, cb) => {
+    if (allowedFileTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    if (file.mimetype === 'application/octet-stream') {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (allowedExtensions.includes(ext)) {
+        return cb(null, true);
+      }
+    }
+    return cb(new Error('Unsupported file type'));
+  },
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25MB
+    files: 10,
+  },
+});
 
 // All routes require authentication
 router.use(authenticate);
@@ -19,9 +75,20 @@ router.use(tenantContext);
  */
 router.get(
   '/',
-  authorize('doctor', 'admin', 'developer'),
+  authorize('doctor', 'admin', 'developer', 'receptionist'),
   validatePagination,
   patientController.getAllPatients
+);
+
+/**
+ * @route   GET /api/v1/patients/me/medical-records
+ * @desc    Get current patient medical records
+ * @access  Private/Patient
+ */
+router.get(
+  '/me/medical-records',
+  authorize('patient'),
+  patientController.getMyMedicalRecords
 );
 
 /**
@@ -134,34 +201,79 @@ router.delete(
  * @desc    Add medical record
  * @access  Private/Doctor/Admin
  */
-// TODO: Implement addMedicalRecord method
-// router.post(
-//   '/:id/medical-records',
-//   authorize('doctor', 'admin', 'developer'),
-//   validateUUID('id'),
-//   validateRequest([
-//     body('record_type').isIn(['diagnosis', 'prescription', 'lab_result', 'imaging', 'note']),
-//     body('title').trim().notEmpty(),
-//     body('description').trim().notEmpty(),
-//     body('doctor_id').isUUID(),
-//     body('appointment_id').optional().isUUID(),
-//     body('attachments').optional().isArray(),
-//   ]),
-//   patientController.addMedicalRecord
-// );
+router.post(
+  '/:id/medical-records',
+  authorize('doctor', 'paramedical', 'admin', 'developer'),
+  validateUUID('id'),
+  validateRequest([
+    body('title').trim().notEmpty(),
+    body('description').trim().notEmpty(),
+    body('record_type').optional().isString().trim(),
+    body('appointment_id').optional().isUUID(),
+    body('is_draft').optional().isBoolean(),
+    body('summary_format').optional().isString().trim(),
+  ]),
+  patientController.addMedicalRecord
+);
 
 /**
  * @route   GET /api/v1/patients/:id/medical-records
  * @desc    Get patient medical records
  * @access  Private
  */
-// TODO: Implement getMedicalRecords method
-// router.get(
-//   '/:id/medical-records',
-//   validateUUID('id'),
-//   validatePagination,
-//   patientController.getMedicalRecords
-// );
+router.get(
+  '/:id/medical-records',
+  authorize('patient', 'doctor', 'paramedical', 'admin', 'developer'),
+  validateUUID('id'),
+  patientController.getMedicalRecords
+);
+
+/**
+ * @route   PUT /api/v1/patients/:id/medical-records/:recordId
+ * @desc    Update medical record (draft/final)
+ * @access  Private/Doctor/Admin
+ */
+router.put(
+  '/:id/medical-records/:recordId',
+  authorize('doctor', 'paramedical', 'admin', 'developer'),
+  validateUUID('id'),
+  validateUUID('recordId'),
+  validateRequest([
+    body('title').optional().trim(),
+    body('description').optional().trim(),
+    body('record_type').optional().isString().trim(),
+    body('is_draft').optional().isBoolean(),
+    body('summary_format').optional().isString().trim(),
+  ]),
+  patientController.updateMedicalRecord
+);
+
+/**
+ * @route   POST /api/v1/patients/:id/medical-records/:recordId/attachments
+ * @desc    Upload attachments for medical record
+ * @access  Private/Doctor/Admin
+ */
+router.post(
+  '/:id/medical-records/:recordId/attachments',
+  authorize('patient', 'doctor', 'paramedical', 'admin', 'developer'),
+  validateUUID('id'),
+  validateUUID('recordId'),
+  upload.array('files', 10),
+  patientController.uploadMedicalRecordAttachments
+);
+
+/**
+ * @route   GET /api/v1/patients/:id/medical-records/:recordId/attachments/:fileName
+ * @desc    Download medical record attachment
+ * @access  Private
+ */
+router.get(
+  '/:id/medical-records/:recordId/attachments/:fileName',
+  authorize('patient', 'doctor', 'paramedical', 'admin', 'developer'),
+  validateUUID('id'),
+  validateUUID('recordId'),
+  patientController.getMedicalRecordAttachment
+);
 
 /**
  * @route   GET /api/v1/patients/:id/statistics

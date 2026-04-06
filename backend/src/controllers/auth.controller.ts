@@ -21,17 +21,17 @@ export class AuthController {
       phone,
       role = 'patient',
       tenant_id,
+      // Doctor-specific fields
+      visa_card_number,
+      card_holder_name,
+      expiry_date,
+      cvv,
+      id_number: _id_number,
     } = req.body;
 
-    // Prevent patient self-registration
-    // Patients must be created by doctors/admins
-    if (role === 'patient') {
-      throw new ValidationError('Patient accounts must be created by a doctor or administrator. Please contact your healthcare provider.');
-    }
-
-    // Only allow doctor and admin self-registration (or developer with special key)
-    if (!['doctor', 'admin'].includes(role)) {
-      throw new ValidationError('Invalid registration type');
+    // Allow patient and doctor self-registration (both require admin approval)
+    if (!['patient', 'doctor'].includes(role)) {
+      throw new ValidationError('Invalid registration type. Only patient and doctor roles can self-register.');
     }
 
     // Check if user already exists
@@ -43,51 +43,188 @@ export class AuthController {
       throw new ValidationError('Email already registered');
     }
 
+    // If doctor, verify card details
+    if (role === 'doctor' && visa_card_number && expiry_date && cvv && card_holder_name) {
+      const { CardVerificationService } = await import('../services/card-verification.service');
+      
+      const verificationResult = await CardVerificationService.verifyCard(
+        visa_card_number,
+        expiry_date,
+        cvv,
+        card_holder_name
+      );
+
+      if (!verificationResult.isValid) {
+        throw new ValidationError(
+          `Card verification failed: ${verificationResult.message}`
+        );
+      }
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Generate email verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // Resolve tenant for self-registration.
+    // Many deployments require users.tenant_id to be non-null; if the client doesn't pass tenant_id,
+    // attach the default system tenant.
+    let effectiveTenantId: string | null = tenant_id || null;
+    if (!effectiveTenantId) {
+      try {
+        const defaultTenant =
+          (await db('tenants').where({ email: 'admin@medical-appointments.com' }).first()) ||
+          (await db('tenants').first());
+        effectiveTenantId = defaultTenant?.id || null;
+      } catch (e) {
+        logger.warn('Failed to resolve default tenant for registration; continuing with null tenant_id.', e as any);
+      }
+    }
 
-    // Create user
-    const [user] = await db('users')
-      .insert({
-        email,
-        password_hash: hashedPassword,
-        first_name,
-        last_name,
-        phone,
-        role,
-        tenant_id: tenant_id || null,
-        email_verified: false,
-        email_verification_token: verificationToken,
-        email_verification_expiry: verificationExpiry,
-        is_active: true,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .returning('*');
+    // Check optional columns exist (some deployments may not have run all migrations)
+    const columnsResult = await db('information_schema.columns')
+      .where({ table_name: 'users' })
+      .select('column_name');
+    const columns = new Set(columnsResult.map((r: any) => (r.column_name as string)));
+    const hasEmailVerificationToken = columns.has('email_verification_token');
+    const hasEmailVerificationExpiry = columns.has('email_verification_expiry');
+    const hasIsActive = columns.has('is_active');
 
-    // Send verification email
+    // Generate email verification token (if columns exist)
+    const verificationToken = hasEmailVerificationToken 
+      ? crypto.randomBytes(32).toString('hex') 
+      : null;
+    const verificationExpiry = hasEmailVerificationExpiry
+      ? new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      : null;
+
+    // Create user with pending approval status
+    const userData: any = {
+      email,
+      password_hash: hashedPassword,
+      first_name,
+      last_name,
+      phone,
+      role,
+      tenant_id: effectiveTenantId,
+      is_email_verified: false,
+      // Self-registrations require admin approval; keep inactive until approved (if column exists)
+      ...(hasIsActive ? { is_active: false } : {}),
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+
+    // Only add email verification fields if columns exist
+    if (hasEmailVerificationToken && verificationToken) {
+      userData.email_verification_token = verificationToken;
+    }
+    if (hasEmailVerificationExpiry && verificationExpiry) {
+      userData.email_verification_expiry = verificationExpiry;
+    }
+    
+    let user;
     try {
-      await sendEmail({
-        to: email,
-        subject: 'Verify your email address',
-        template: 'email-verification',
-        data: {
-          name: first_name,
-          verificationUrl: `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`,
-        },
+      [user] = await db('users')
+        .insert(userData)
+        .returning('*');
+    } catch (error: any) {
+      logger.error('Failed to create user during registration:', {
+        error: error.message,
+        code: error.code,
+        detail: error.detail,
+        constraint: error.constraint,
+        userData: { ...userData, password_hash: '[REDACTED]' },
       });
+      throw new ValidationError(`Registration failed: ${error.detail || error.message}`);
+    }
+
+    // Create patient/doctor record if needed
+    if (role === 'patient' && effectiveTenantId) {
+      try {
+        await db('patients').insert({
+          user_id: user.id,
+          tenant_id: effectiveTenantId,
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
+      } catch (error: any) {
+        logger.warn('Failed to create patient record during registration (non-critical):', error.message);
+        // Don't fail registration if patient record creation fails
+      }
+    } else if (role === 'doctor' && effectiveTenantId) {
+      try {
+        await db('doctors').insert({
+          user_id: user.id,
+          tenant_id: effectiveTenantId,
+          specialty: 'General',
+          is_active: false, // Pending admin approval
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
+      } catch (error: any) {
+        logger.warn('Failed to create doctor record during registration (non-critical):', error.message);
+        // Don't fail registration if doctor record creation fails
+      }
+    }
+
+    // Send verification email (only if verification token was created)
+    if (verificationToken) {
+      try {
+        await sendEmail({
+          to: email,
+          subject: 'Verify your email address',
+          template: 'email-verification',
+          data: {
+            name: first_name,
+            verificationUrl: `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`,
+          },
+        });
+      } catch (error) {
+        logger.error('Failed to send verification email:', error);
+        // Don't fail registration if email fails
+      }
+    } else {
+      logger.warn('Email verification columns not found; skipping verification email. Run migration 006 to enable email verification.');
+    }
+
+    // Send admin approval notification immediately on registration (for both patients and doctors)
+    // This ensures admins are notified even if email verification is not completed
+    // Both patients and doctors require admin approval before they can use the system
+    try {
+      const adminEmails = [
+        'haitham.massarwah@medical-appointments.com',
+        'hn.medicalapoointments@gmail.com',
+      ];
+      
+      const roleDisplayName = role === 'doctor' ? 'Doctor' : 'Patient';
+      
+      for (const adminEmail of adminEmails) {
+        try {
+          await sendEmail({
+            to: adminEmail,
+            subject: `New ${roleDisplayName} Registration Requires Approval - ${first_name} ${last_name}`,
+            template: 'admin-approval-required',
+            data: {
+              adminName: 'Admin',
+              userName: `${first_name} ${last_name}`,
+              userEmail: email,
+              userRole: role,
+              userId: user.id,
+              message: `A new ${role} has registered and is waiting for approval. Email verification ${verificationToken ? 'pending' : 'not required'}.`,
+            },
+          });
+          logger.info(`Admin approval email sent to ${adminEmail} for ${role} ${user.id}`);
+        } catch (error) {
+          logger.error(`Failed to send admin notification email to ${adminEmail}:`, error);
+        }
+      }
     } catch (error) {
-      logger.error('Failed to send verification email:', error);
-      // Don't fail registration if email fails
+      logger.error('Failed to send admin approval notifications on registration:', error);
+      // Don't fail registration if notification fails
     }
 
     // Generate tokens
     const accessToken = generateToken({
       id: user.id,
+      userId: user.id,
       tenantId: user.tenant_id,
       role: user.role,
       email: user.email,
@@ -95,13 +232,18 @@ export class AuthController {
 
     const refreshToken = generateRefreshToken({
       id: user.id,
+      userId: user.id,
       tenantId: user.tenant_id,
       role: user.role,
       email: user.email,
     });
 
     // Remove sensitive data
-    const { password_hash, email_verification_token, ...userResponse } = user;
+    const {
+      password_hash: _password_hash,
+      email_verification_token: _email_verification_token,
+      ...userResponse
+    } = user;
 
     logger.info(`New user registered: ${user.id} (${email})`);
 
@@ -124,10 +266,11 @@ export class AuthController {
    */
   login = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { email, password } = req.body;
+    const normalizedEmail = (email || '').toLowerCase().trim();
 
     // Find user
     const user = await db('users')
-      .where({ email })
+      .whereRaw('LOWER(email) = ?', [normalizedEmail])
       .first();
 
     if (!user) {
@@ -152,6 +295,7 @@ export class AuthController {
     // Generate tokens
     const accessToken = generateToken({
       id: user.id,
+      userId: user.id,
       tenantId: user.tenant_id,
       role: user.role,
       email: user.email,
@@ -159,13 +303,19 @@ export class AuthController {
 
     const refreshToken = generateRefreshToken({
       id: user.id,
+      userId: user.id,
       tenantId: user.tenant_id,
       role: user.role,
       email: user.email,
     });
 
     // Remove sensitive data
-    const { password_hash, email_verification_token, password_reset_token, ...userResponse } = user;
+    const {
+      password_hash: _ph,
+      email_verification_token: _evt,
+      password_reset_token: _prt,
+      ...userResponse
+    } = user;
 
     logger.info(`User logged in: ${user.id} (${email})`);
 
@@ -186,19 +336,60 @@ export class AuthController {
    * Forgot password
    * POST /api/v1/auth/forgot-password
    */
-  forgotPassword = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const { email } = req.body;
+  /**
+   * Check if email exists
+   * GET /api/v1/auth/check-email
+   */
+  checkEmailExists = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { email } = req.query;
+    const normalizedEmail = (email || '').toString().toLowerCase().trim();
+
+    if (!email) {
+      throw new ValidationError('Email is required');
+    }
 
     // Find user
     const user = await db('users')
-      .where({ email })
+      .whereRaw('LOWER(email) = ?', [normalizedEmail])
+      .first();
+
+    return res.status(200).json({
+      exists: !!user,
+    });
+  });
+
+  forgotPassword = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { email } = req.body;
+    const normalizedEmail = (email || '').toString().toLowerCase().trim();
+
+    // Find user
+    const user = await db('users')
+      .whereRaw('LOWER(email) = ?', [normalizedEmail])
       .first();
 
     if (!user) {
-      // Don't reveal if email exists
+      // Email not found - inform user
       return res.status(200).json({
-        status: 'success',
-        message: 'If an account exists with this email, you will receive a password reset link.',
+        status: 'error',
+        exists: false,
+        message: 'Email address not found in the system',
+      });
+    }
+
+    // Check if password reset columns exist (migration 006 may not have run)
+    const columnsResult = await db('information_schema.columns')
+      .where({ table_name: 'users' })
+      .select('column_name');
+    const columns = new Set(columnsResult.map((r: any) => (r.column_name as string)));
+    const hasPasswordResetToken = columns.has('password_reset_token');
+    const hasPasswordResetExpiry = columns.has('password_reset_expiry');
+
+    if (!hasPasswordResetToken || !hasPasswordResetExpiry) {
+      logger.warn('Password reset columns not found. Run migration 006 to enable password reset.');
+      return res.status(500).json({
+        status: 'error',
+        exists: true,
+        message: 'Password reset is not available. Please contact support.',
       });
     }
 
@@ -235,6 +426,7 @@ export class AuthController {
 
     res.status(200).json({
       status: 'success',
+      exists: true,
       message: 'Password reset link sent to your email',
     });
   });
@@ -299,7 +491,7 @@ export class AuthController {
     await db('users')
       .where({ id: user.id })
       .update({
-        email_verified: true,
+        is_email_verified: true,
         email_verification_token: null,
         email_verification_expiry: null,
         updated_at: new Date(),
@@ -307,9 +499,71 @@ export class AuthController {
 
     logger.info(`Email verified for user: ${user.id}`);
 
+    // Send admin notification for approval (for both patient and doctor)
+    try {
+      // Get all admin and developer users
+      const admins = await db('users')
+        .whereIn('role', ['admin', 'developer'])
+        .select('id', 'email', 'first_name', 'last_name');
+
+      // Create notification for each admin
+      const notificationPromises = admins.map(admin => 
+        db('notifications').insert({
+          tenant_id: user.tenant_id || null,
+          user_id: admin.id,
+          type: 'email', // Notification type enum: 'email', 'sms', 'whatsapp', 'push'
+          title: `New ${user.role} Registration Requires Approval`,
+          message: `${user.first_name} ${user.last_name} (${user.email}) has verified their email and is waiting for approval.`,
+          is_read: false,
+          data: {
+            userId: user.id,
+            userEmail: user.email,
+            userRole: user.role,
+            userName: `${user.first_name} ${user.last_name}`,
+          },
+          status: 'pending',
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+      );
+
+      await Promise.all(notificationPromises);
+
+      // Also send email notification to specific admin emails
+      const adminEmails = [
+        'haitham.massarwah@medical-appointments.com',
+        'hn.medicalapoointments@gmail.com',
+      ];
+      
+      for (const adminEmail of adminEmails) {
+        try {
+          await sendEmail({
+            to: adminEmail,
+            subject: `New ${user.role} Registration Requires Approval`,
+            template: 'admin-approval-required',
+            data: {
+              adminName: 'Admin',
+              userName: `${user.first_name} ${user.last_name}`,
+              userEmail: user.email,
+              userRole: user.role,
+              userId: user.id,
+            },
+          });
+          logger.info(`Admin approval email sent to ${adminEmail} for user ${user.id}`);
+        } catch (error) {
+          logger.error(`Failed to send admin notification email to ${adminEmail}:`, error);
+        }
+      }
+
+      logger.info(`Admin notifications sent for user approval: ${user.id}`);
+    } catch (error) {
+      logger.error('Failed to send admin notifications:', error);
+      // Don't fail email verification if notification fails
+    }
+
     res.status(200).json({
       status: 'success',
-      message: 'Email verified successfully',
+      message: 'Email verified successfully. Your account is pending admin approval.',
     });
   });
 
@@ -318,7 +572,10 @@ export class AuthController {
    * GET /api/v1/auth/me
    */
   getCurrentUser = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const userId = req.user!.userId;
+    const userId = req.user?.userId || req.user?.id;
+    if (!userId) {
+      throw new AuthenticationError('User not authenticated');
+    }
 
     const user = await db('users')
       .where({ id: userId })
@@ -329,7 +586,12 @@ export class AuthController {
     }
 
     // Remove sensitive data
-    const { password_hash, email_verification_token, password_reset_token, ...userResponse } = user;
+    const {
+      password_hash: _ph2,
+      email_verification_token: _evt2,
+      password_reset_token: _prt2,
+      ...userResponse
+    } = user;
 
     res.status(200).json({
       status: 'success',
@@ -374,6 +636,7 @@ export class AuthController {
     // Generate new tokens
     const accessToken = generateToken({
       id: user.id,
+      userId: user.id,
       tenantId: user.tenant_id,
       role: user.role,
       email: user.email,

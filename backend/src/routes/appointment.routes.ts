@@ -49,6 +49,17 @@ router.get(
 );
 
 /**
+ * @route   GET /api/v1/appointments/:id/no-show-risk
+ * @desc    Get AI no-show prediction for appointment
+ * @access  Private
+ */
+router.get(
+  '/:id/no-show-risk',
+  [param('id').isUUID().withMessage('Valid appointment ID is required'), validateRequest],
+  appointmentController.getNoShowRisk.bind(appointmentController)
+);
+
+/**
  * @route   GET /api/v1/appointments/:id
  * @desc    Get appointment by ID
  * @access  Private
@@ -112,6 +123,22 @@ router.post(
     validateRequest,
   ],
   appointmentController.rescheduleAppointment.bind(appointmentController)
+);
+
+/**
+ * @route   PUT /api/v1/appointments/:id
+ * @desc    Update appointment (status, notes, etc.)
+ * @access  Private
+ */
+router.put(
+  '/:id',
+  [
+    param('id').isUUID().withMessage('Valid appointment ID is required'),
+    body('status').optional().isIn(['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show', 'rescheduled']),
+    body('notes').optional().isString().trim(),
+    validateRequest,
+  ],
+  appointmentController.updateAppointment.bind(appointmentController)
 );
 
 /**

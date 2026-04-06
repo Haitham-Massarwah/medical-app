@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
 
 class AppointmentsListPage extends StatefulWidget {
   const AppointmentsListPage({super.key});
@@ -8,9 +9,11 @@ class AppointmentsListPage extends StatefulWidget {
 }
 
 class _AppointmentsListPageState extends State<AppointmentsListPage> {
+  final ApiService _apiService = ApiService();
   List<Map<String, dynamic>> _appointments = [];
   bool _isLoading = true;
   String _selectedStatus = 'כל התורים';
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -20,80 +23,43 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
 
   Future<void> _loadAppointments() async {
     setState(() => _isLoading = true);
-    
-    // Mock appointments data
-    await Future.delayed(const Duration(seconds: 1));
-    
-    setState(() {
-      _appointments = [
-        {
-          'id': '1',
-          'patient_name': 'שרה לוי',
-          'patient_phone': '050-1234567',
-          'doctor_name': 'ד"ר יוסי כהן',
-          'doctor_specialty': 'רפואה פנימית',
-          'date': '2024-01-25',
-          'time': '09:00',
-          'status': 'confirmed',
-          'consultation_fee': 300.0,
-          'payment_status': 'paid',
-          'created_at': '2024-01-20',
-        },
-        {
-          'id': '2',
-          'patient_name': 'דוד כהן',
-          'patient_phone': '052-9876543',
-          'doctor_name': 'ד"ר רחל אברהם',
-          'doctor_specialty': 'רפואת ילדים',
-          'date': '2024-01-25',
-          'time': '10:30',
-          'status': 'pending',
-          'consultation_fee': 250.0,
-          'payment_status': 'pending',
-          'created_at': '2024-01-21',
-        },
-        {
-          'id': '3',
-          'patient_name': 'רחל אברהם',
-          'patient_phone': '054-5555555',
-          'doctor_name': 'ד"ר מיכל לוי',
-          'doctor_specialty': 'גינקולוגיה',
-          'date': '2024-01-26',
-          'time': '14:00',
-          'status': 'confirmed',
-          'consultation_fee': 400.0,
-          'payment_status': 'paid',
-          'created_at': '2024-01-22',
-        },
-        {
-          'id': '4',
-          'patient_name': 'אמיר דוד',
-          'patient_phone': '051-2222222',
-          'doctor_name': 'ד"ר אמיר דוד',
-          'doctor_specialty': 'אורתופדיה',
-          'date': '2024-01-24',
-          'time': '16:00',
-          'status': 'cancelled',
-          'consultation_fee': 350.0,
-          'payment_status': 'refunded',
-          'created_at': '2024-01-19',
-        },
-        {
-          'id': '5',
-          'patient_name': 'מיכל לוי',
-          'patient_phone': '053-3333333',
-          'doctor_name': 'ד"ר יוסי כהן',
-          'doctor_specialty': 'רפואה פנימית',
-          'date': '2024-01-27',
-          'time': '11:00',
-          'status': 'completed',
-          'consultation_fee': 300.0,
-          'payment_status': 'paid',
-          'created_at': '2024-01-18',
-        },
-      ];
-      _isLoading = false;
-    });
+
+    try {
+      final response = await _apiService.get('/appointments');
+      if (response['success'] == true) {
+        final dynamic payload = response['data'];
+        final List<dynamic> appointments =
+            payload is Map<String, dynamic> && payload['data'] != null
+                ? payload['data'] as List<dynamic>
+                : (payload as List<dynamic>? ?? []);
+
+        setState(() {
+          _appointments = List<Map<String, dynamic>>.from(appointments);
+          _errorMessage = null;
+          _isLoading = false;
+        });
+      } else {
+        throw Exception(response['message']);
+      }
+    } catch (e) {
+      // PD-01: Remove development/placeholder messages - show user-friendly error only
+      setState(() {
+        _appointments = [];
+        // Show simple, user-friendly message without technical details
+        _errorMessage = 'לא ניתן לטעון תורים כרגע. אנא נסה שוב מאוחר יותר.';
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage!),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -152,6 +118,28 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
   }
 
   Widget _buildAppointmentsList() {
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            _errorMessage!,
+            style: const TextStyle(color: Colors.redAccent),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    if (_appointments.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text('אין תורים להצגה עבור המשתמש הזה.'),
+        ),
+      );
+    }
+
     final filteredAppointments = _appointments.where((appointment) {
       if (_selectedStatus == 'כל התורים') return true;
       return _getStatusLabel(appointment['status']) == _selectedStatus;

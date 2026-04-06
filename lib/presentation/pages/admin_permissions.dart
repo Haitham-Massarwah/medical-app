@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../services/admin_service.dart';
+import '../widgets/dashboard_sidebar.dart';
+import '../../core/theme/app_colors.dart';
 
 /// ADMIN PERMISSIONS MANAGEMENT
-/// Manage user roles and system access permissions
+/// Manage system permissions and feature toggles
 class AdminPermissions extends StatefulWidget {
   const AdminPermissions({Key? key}) : super(key: key);
 
@@ -10,20 +13,15 @@ class AdminPermissions extends StatefulWidget {
 }
 
 class _AdminPermissionsState extends State<AdminPermissions> {
-  final List<Map<String, dynamic>> _users = [
-    {
-      'name': 'ד"ר אברהם כהן',
-      'email': 'doctor@test.com',
-      'role': 'doctor',
-      'permissions': ['view_patients', 'manage_appointments', 'view_payments'],
-    },
-    {
-      'name': 'לקוח ישראלי',
-      'email': 'customer@test.com',
-      'role': 'patient',
-      'permissions': ['book_appointments', 'view_history'],
-    },
-  ];
+  final AdminService _adminService = AdminService();
+  String _currentRole = 'developer';
+  
+  // System permissions
+  bool _doctorPaymentsEnabled = true;
+  bool _patientPaymentsEnabled = true;
+  bool _smsEnabled = true;
+  bool _emailNotificationsEnabled = true;
+  bool _isLoading = true;
 
   final Map<String, String> _roleNames = {
     'admin': 'מנהל מערכת',
@@ -44,75 +42,268 @@ class _AdminPermissionsState extends State<AdminPermissions> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _loadPermissions();
+  }
+
+  Future<void> _loadPermissions() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final permissions = await _adminService.getPermissions();
+      if (mounted) {
+        setState(() {
+          _doctorPaymentsEnabled = permissions['doctor_payments_enabled'] ?? true;
+          _patientPaymentsEnabled = permissions['patient_payments_enabled'] ?? true;
+          _smsEnabled = permissions['sms_enabled'] ?? true;
+          _emailNotificationsEnabled = permissions['email_notifications_enabled'] ?? true;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _savePermissions() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final success = await _adminService.updatePermissions({
+        'doctor_payments_enabled': _doctorPaymentsEnabled,
+        'patient_payments_enabled': _patientPaymentsEnabled,
+        'sms_enabled': _smsEnabled,
+        'email_notifications_enabled': _emailNotificationsEnabled,
+      });
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('הרשאות עודכנו בהצלחה'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('שגיאה בעדכון הרשאות'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ניהול הרשאות'),
-        backgroundColor: Colors.red,
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+    final locale = Localizations.localeOf(context);
+    final isRTL = locale.languageCode == 'he' || locale.languageCode == 'ar';
+
+    final routeArgs = ModalRoute.of(context)?.settings.arguments;
+    if (routeArgs is Map<String, dynamic> && routeArgs['role'] is String) {
+      _currentRole = routeArgs['role'] as String;
+    }
+
+    return Directionality(
+      textDirection: isRTL ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+      body: SafeArea(
+        child: Row(
+          children: [
+            // Sidebar
+            DashboardSidebar(currentRoute: '/admin-permissions', role: _currentRole),
+            
+            // Main Content
+            Expanded(
+              child: Container(
+                color: AppColors.backgroundLight,
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(30),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'ניהול הרשאות מערכת - System Permissions',
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: _savePermissions,
+                                  icon: const Icon(Icons.save),
+                                  label: const Text('שמור הרשאות'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 30),
+                            
+                            // Permissions Cards
+                            _buildPermissionCard(
+                              'תשלומים מרופאים - Doctor Payments',
+                              'הפעל/כבה את אפשרות התשלומים מרופאים. כאשר כבוי, רופאים לא יצטרכו להזין פרטי כרטיס אשראי בעת הרשמה.',
+                              Icons.payment,
+                              Colors.purple,
+                              _doctorPaymentsEnabled,
+                              (value) {
+                                setState(() {
+                                  _doctorPaymentsEnabled = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            
+                            _buildPermissionCard(
+                              'תשלומים ממטופלים - Patient Payments',
+                              'הפעל/כבה את אפשרות התשלומים ממטופלים.',
+                              Icons.payment,
+                              Colors.blue,
+                              _patientPaymentsEnabled,
+                              (value) {
+                                setState(() {
+                                  _patientPaymentsEnabled = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            
+                            _buildPermissionCard(
+                              'שירות SMS - SMS Service',
+                              'הפעל/כבה את שירות ה-SMS במערכת.',
+                              Icons.sms,
+                              Colors.orange,
+                              _smsEnabled,
+                              (value) {
+                                setState(() {
+                                  _smsEnabled = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            
+                            _buildPermissionCard(
+                              'התראות אימייל - Email Notifications',
+                              'הפעל/כבה את התראות האימייל במערכת.',
+                              Icons.email,
+                              Colors.teal,
+                              _emailNotificationsEnabled,
+                              (value) {
+                                setState(() {
+                                  _emailNotificationsEnabled = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _addUser,
-            tooltip: 'הוסף משתמש',
+      ),
+    ),
+    );
+  }
+
+  Widget _buildPermissionCard(
+    String title,
+    String description,
+    IconData icon,
+    Color color,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: color.withOpacity(0.3), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Quick Stats
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'מנהלים',
-                      '1',
-                      Colors.red,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatCard(
-                      'רופאים',
-                      _users.where((u) => u['role'] == 'doctor').length.toString(),
-                      Colors.green,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatCard(
-                      'מטופלים',
-                      _users.where((u) => u['role'] == 'patient').length.toString(),
-                      Colors.blue,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              
-              // Users List
-              const Text(
-                'משתמשים והרשאות',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              ..._users.map((user) => _buildUserCard(user)),
-            ],
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 32),
           ),
-        ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: color,
+          ),
+        ],
       ),
     );
   }

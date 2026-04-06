@@ -17,9 +17,9 @@ class LanguageService {
   static Future<String> getCurrentLanguage() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(_languageKey) ?? 'עברית';
+      return prefs.getString(_languageKey) ?? 'English'; // Default to English
     } catch (e) {
-      return 'עברית';
+      return 'English'; // Default to English
     }
   }
   
@@ -52,9 +52,9 @@ class LanguageService {
         }
       }
       
-      return supportedLanguages['עברית']!;
+      return supportedLanguages['English']!; // Default to English
     } catch (e) {
-      return supportedLanguages['עברית']!;
+      return supportedLanguages['English']!; // Default to English
     }
   }
   

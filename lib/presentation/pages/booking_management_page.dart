@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../models/treatment_models_simple.dart';
+import '../../services/appointment_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/doctor_service.dart';
 
 class BookingManagementPage extends StatefulWidget {
   const BookingManagementPage({super.key});
@@ -9,64 +11,162 @@ class BookingManagementPage extends StatefulWidget {
 }
 
 class _BookingManagementPageState extends State<BookingManagementPage> {
+  final AppointmentService _appointmentService = AppointmentService();
+  final DoctorService _doctorService = DoctorService();
+  final AuthService _authService = AuthService();
   bool _isLoading = false;
   List<Map<String, dynamic>> _bookings = [];
+  List<Map<String, dynamic>> _allBookings = [];
   String _selectedFilter = 'all';
-  
-  // Mock data - would typically come from API
-  final List<Map<String, dynamic>> _mockBookings = [
-    {
-      'id': '1',
-      'patientName': 'שרה לוי',
-      'patientPhone': '050-1234567',
-      'treatmentType': 'ייעוץ כללי',
-      'appointmentDate': DateTime.now().add(const Duration(days: 1)),
-      'timeSlot': '10:00',
-      'status': 'confirmed',
-      'approvalRequired': false,
-      'amount': 250.0,
-    },
-    {
-      'id': '2',
-      'patientName': 'דוד כהן',
-      'patientPhone': '050-7654321',
-      'treatmentType': 'בדיקה גופנית',
-      'appointmentDate': DateTime.now().add(const Duration(days: 2)),
-      'timeSlot': '14:30',
-      'status': 'pending_approval',
-      'approvalRequired': true,
-      'amount': 300.0,
-    },
-    {
-      'id': '3',
-      'patientName': 'רחל ישראלי',
-      'patientPhone': '050-9876543',
-      'treatmentType': 'ייעוץ מומחה',
-      'appointmentDate': DateTime.now().add(const Duration(days: 3)),
-      'timeSlot': '09:00',
-      'status': 'confirmed',
-      'approvalRequired': false,
-      'amount': 400.0,
-    },
-  ];
+  String? _doctorId;
+  String _doctorName = '';
+  String _doctorSpecialty = '';
+  /// SRS Rev 02 receptionist (and admin/developer): tenant-wide schedule, no doctor profile.
+  bool _tenantWideViewer = false;
 
   @override
   void initState() {
     super.initState();
-    _loadBookings();
+    _bootstrap();
   }
 
-  Future<void> _loadBookings() async {
+  Future<void> _bootstrap() async {
+    setState(() => _isLoading = true);
+    try {
+      final me = await _authService.getCurrentUser();
+      final role = me['data']?['user']?['role']?.toString() ?? '';
+      _tenantWideViewer =
+          role == 'receptionist' || role == 'admin' || role == 'developer';
+      if (_tenantWideViewer) {
+        await _loadTenantWideBookings();
+      } else {
+        await _loadDoctorAndBookings();
+      }
+    } catch (e) {
+      _showError('שגיאה בטעינת נתונים: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _reloadSchedule() async {
+    if (_tenantWideViewer) {
+      await _loadTenantWideBookings();
+    } else {
+      await _loadBookings();
+    }
+  }
+
+  Future<void> _loadTenantWideBookings() async {
+    setState(() => _isLoading = true);
+    try {
+      final appointments = await _appointmentService.getAppointments();
+      final mapped = appointments.map((appointment) {
+        final dateValue = appointment['appointment_date'];
+        final date = DateTime.tryParse(dateValue?.toString() ?? '');
+        var patientName =
+            (appointment['patientName'] ?? appointment['patient_name'] ?? '').toString().trim();
+        if (patientName.isEmpty) patientName = 'לא ידוע';
+        final status = appointment['status']?.toString() ?? 'scheduled';
+        final amount = double.tryParse(
+              appointment['service_price']?.toString() ??
+                  appointment['amount']?.toString() ??
+                  '0',
+            ) ??
+            0;
+        return {
+          'id': appointment['id']?.toString() ?? '',
+          'doctorId': appointment['doctor_id']?.toString() ?? '',
+          'patientId': appointment['patient_id']?.toString() ?? '',
+          'patientName': patientName,
+          'patientPhone':
+              appointment['patient_phone']?.toString() ?? appointment['patientPhone']?.toString() ?? '',
+          'treatmentType':
+              appointment['service_name']?.toString() ?? appointment['specialty']?.toString() ?? 'טיפול',
+          'treatmentTypeId': appointment['service_id']?.toString() ?? '',
+          'appointmentDate': date ?? DateTime.now(),
+          'timeSlot': date != null ? _formatTime(date) : '',
+          'amount': amount,
+          'status': status,
+          'approvalRequired': status == 'scheduled',
+        };
+      }).toList();
+      if (mounted) {
+        setState(() {
+          _allBookings = mapped;
+          _applyFilter();
+        });
+      }
+    } catch (e) {
+      _showError('שגיאה בטעינת התורים: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadDoctorAndBookings() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
-      
+      final doctor = await _doctorService.getMyDoctorProfile();
+      final doctorId = doctor['id']?.toString();
+      if (doctorId == null || doctorId.isEmpty) {
+        throw Exception('Doctor profile not found');
+      }
+      _doctorId = doctorId;
+      final firstName = doctor['first_name']?.toString() ?? '';
+      final lastName = doctor['last_name']?.toString() ?? '';
+      _doctorName = [firstName, lastName].where((part) => part.isNotEmpty).join(' ');
+      _doctorSpecialty = doctor['specialty']?.toString() ?? '';
+      await _loadBookings();
+    } catch (e) {
+      _showError('שגיאה בטעינת פרטי רופא: $e');
+    } finally {
       setState(() {
-        _bookings = List.from(_mockBookings);
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadBookings() async {
+    if (_doctorId == null) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final appointments = await _doctorService.getDoctorAppointments(
+        doctorId: _doctorId!,
+      );
+      final mapped = appointments.map((appointment) {
+        final dateValue = appointment['appointment_date'];
+        final date = DateTime.tryParse(dateValue?.toString() ?? '');
+        final patientFirst = appointment['patient_first_name']?.toString() ?? '';
+        final patientLast = appointment['patient_last_name']?.toString() ?? '';
+        final patientName = '$patientFirst $patientLast'.trim();
+        final status = appointment['status']?.toString() ?? 'scheduled';
+        final amount = double.tryParse(appointment['service_price']?.toString() ?? '0') ?? 0;
+        return {
+          'id': appointment['id']?.toString() ?? '',
+          'doctorId': appointment['doctor_id']?.toString() ?? '',
+          'patientId': appointment['patient_id']?.toString() ?? '',
+          'patientName': patientName.isEmpty ? 'לא ידוע' : patientName,
+          'patientPhone': appointment['patient_phone']?.toString() ?? '',
+          'treatmentType': appointment['service_name']?.toString() ?? 'טיפול',
+          'treatmentTypeId': appointment['service_id']?.toString() ?? '',
+          'appointmentDate': date ?? DateTime.now(),
+          'timeSlot': date != null ? _formatTime(date) : '',
+          'amount': amount,
+          'status': status,
+          'approvalRequired': status == 'scheduled',
+        };
+      }).toList();
+
+      setState(() {
+        _allBookings = mapped;
+        _applyFilter();
       });
     } catch (e) {
       _showError('שגיאה בטעינת התורים: $e');
@@ -87,7 +187,7 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadBookings,
+            onPressed: _bootstrap,
             tooltip: 'רענן',
           ),
         ],
@@ -111,28 +211,30 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
                     ),
                     items: const [
                       DropdownMenuItem(value: 'all', child: Text('כל התורים')),
-                      DropdownMenuItem(value: 'pending_approval', child: Text('ממתינים לאישור')),
+                      DropdownMenuItem(value: 'scheduled', child: Text('ממתינים לאישור')),
                       DropdownMenuItem(value: 'confirmed', child: Text('מאושרים')),
                       DropdownMenuItem(value: 'cancelled', child: Text('מבוטלים')),
                     ],
                     onChanged: (value) {
                       setState(() {
                         _selectedFilter = value!;
-                        _filterBookings();
+                        _applyFilter();
                       });
                     },
                   ),
                 ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: _showBookingSettings,
-                  icon: const Icon(Icons.settings),
-                  label: const Text('הגדרות'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
+                if (!_tenantWideViewer) ...[
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _showBookingSettings,
+                    icon: const Icon(Icons.settings),
+                    label: const Text('הגדרות'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -284,7 +386,7 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
             // Action Buttons
             Row(
               children: [
-                if (booking['status'] == 'pending_approval') ...[
+                if (booking['status'] == 'scheduled') ...[
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => _approveBooking(booking['id']),
@@ -307,6 +409,19 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
                     ),
                   ),
                 ] else if (booking['status'] == 'confirmed') ...[
+                  if (!_tenantWideViewer) ...[
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => _openTreatmentCompletion(booking),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('סיום טיפול'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => _rescheduleBooking(booking),
@@ -316,7 +431,7 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => _cancelBooking(booking['id']),
+                      onPressed: () => _confirmCancelBooking(booking['id']),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: const BorderSide(color: Colors.red),
@@ -344,13 +459,21 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
     String text;
     
     switch (status) {
-      case 'pending_approval':
+      case 'scheduled':
         color = Colors.orange;
         text = 'ממתין לאישור';
         break;
       case 'confirmed':
         color = Colors.green;
         text = 'מאושר';
+        break;
+      case 'rescheduled':
+        color = Colors.blue;
+        text = 'נדחה';
+        break;
+      case 'completed':
+        color = Colors.blueGrey;
+        text = 'הושלם';
         break;
       case 'cancelled':
         color = Colors.red;
@@ -386,14 +509,43 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
-  void _filterBookings() {
+  String _formatTime(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  void _applyFilter() {
     setState(() {
       if (_selectedFilter == 'all') {
-        _bookings = List.from(_mockBookings);
+        _bookings = List.from(_allBookings);
       } else {
-        _bookings = _mockBookings.where((booking) => booking['status'] == _selectedFilter).toList();
+        _bookings = _allBookings
+            .where((booking) => booking['status'] == _selectedFilter)
+            .toList();
       }
     });
+  }
+
+  void _openTreatmentCompletion(Map<String, dynamic> booking) {
+    final appointmentId = booking['id']?.toString() ?? '';
+    final patientId = booking['patientId']?.toString() ?? '';
+    if (appointmentId.isEmpty || patientId.isEmpty) {
+      _showError('פרטי התור אינם מלאים');
+      return;
+    }
+    Navigator.pushNamed(
+      context,
+      '/treatment-completion',
+      arguments: {
+        'appointmentId': appointmentId,
+        'patientId': patientId,
+        'patientName': booking['patientName']?.toString() ?? '',
+        'treatmentTypeId': booking['treatmentTypeId']?.toString() ?? '',
+        'treatmentTypeName': booking['treatmentType']?.toString() ?? 'טיפול',
+        'amount': booking['amount'] ?? 0,
+      },
+    );
   }
 
   void _approveBooking(String bookingId) {
@@ -410,7 +562,7 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _updateBookingStatus(bookingId, 'confirmed');
+              _confirmBooking(bookingId);
             },
             child: const Text('אשר'),
           ),
@@ -433,7 +585,7 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _updateBookingStatus(bookingId, 'cancelled');
+              _cancelBooking(bookingId);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('דחה'),
@@ -450,15 +602,16 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
       '/reschedule',
       arguments: {
         'appointmentId': booking['id'],
-        'doctorName': 'ד"ר כהן',
-        'specialty': booking['treatmentType'],
+        'doctorId': booking['doctorId'],
+        'doctorName': _doctorName.isEmpty ? 'רופא' : _doctorName,
+        'specialty': _doctorSpecialty.isEmpty ? booking['treatmentType'] : _doctorSpecialty,
         'currentDate': booking['appointmentDate'],
         'currentTimeSlot': booking['timeSlot'],
       },
     );
   }
 
-  void _cancelBooking(String bookingId) {
+  void _confirmCancelBooking(String bookingId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -472,7 +625,7 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _updateBookingStatus(bookingId, 'cancelled');
+              _cancelBooking(bookingId);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('בטל'),
@@ -483,22 +636,65 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
   }
 
   void _viewBookingDetails(Map<String, dynamic> booking) {
+    final appointmentId = booking['id']?.toString() ?? '';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('פרטי התור'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDetailRow('מטופל', booking['patientName']),
-            _buildDetailRow('טלפון', booking['patientPhone']),
-            _buildDetailRow('סוג טיפול', booking['treatmentType']),
-            _buildDetailRow('תאריך', _formatDate(booking['appointmentDate'])),
-            _buildDetailRow('שעה', booking['timeSlot']),
-            _buildDetailRow('סכום', '₪${booking['amount'].toStringAsFixed(0)}'),
-            _buildDetailRow('סטטוס', _getStatusText(booking['status'])),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('מטופל', booking['patientName']),
+              _buildDetailRow('טלפון', booking['patientPhone']),
+              _buildDetailRow('סוג טיפול', booking['treatmentType']),
+              _buildDetailRow('תאריך', _formatDate(booking['appointmentDate'])),
+              _buildDetailRow('שעה', booking['timeSlot']),
+              _buildDetailRow('סכום', '₪${booking['amount'].toStringAsFixed(0)}'),
+              _buildDetailRow('סטטוס', _getStatusText(booking['status'])),
+              if (appointmentId.isNotEmpty && booking['status'] != 'completed' && booking['status'] != 'cancelled')
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _appointmentService.getNoShowRisk(appointmentId),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+                    final data = snapshot.data!;
+                    final risk = data['risk']?.toString() ?? 'low';
+                    final score = (data['score'] is int) ? data['score'] as int : (data['score'] as num?)?.toInt() ?? 0;
+                    Color riskColor = Colors.green;
+                    String riskLabel = 'סיכון אי-הופעה: נמוך';
+                    if (risk == 'high') {
+                      riskColor = Colors.red;
+                      riskLabel = 'סיכון אי-הופעה: גבוה ($score)';
+                    } else if (risk == 'medium') {
+                      riskColor = Colors.orange;
+                      riskLabel = 'סיכון אי-הופעה: בינוני ($score)';
+                    } else {
+                      riskLabel = 'סיכון אי-הופעה: נמוך ($score)';
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: riskColor, size: 20),
+                          const SizedBox(width: 8),
+                          Text(riskLabel, style: TextStyle(fontWeight: FontWeight.bold, color: riskColor)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -528,10 +724,14 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
 
   String _getStatusText(String status) {
     switch (status) {
-      case 'pending_approval':
+      case 'scheduled':
         return 'ממתין לאישור';
       case 'confirmed':
         return 'מאושר';
+      case 'rescheduled':
+        return 'נדחה';
+      case 'completed':
+        return 'הושלם';
       case 'cancelled':
         return 'מבוטל';
       default:
@@ -539,15 +739,24 @@ class _BookingManagementPageState extends State<BookingManagementPage> {
     }
   }
 
-  void _updateBookingStatus(String bookingId, String newStatus) {
-    setState(() {
-      final index = _bookings.indexWhere((booking) => booking['id'] == bookingId);
-      if (index != -1) {
-        _bookings[index]['status'] = newStatus;
-      }
-    });
-    
-    _showSuccess('התור עודכן בהצלחה');
+  Future<void> _confirmBooking(String bookingId) async {
+    try {
+      await _appointmentService.confirmAppointment(bookingId);
+      await _reloadSchedule();
+      _showSuccess('התור עודכן בהצלחה');
+    } catch (e) {
+      _showError('שגיאה בעדכון התור: $e');
+    }
+  }
+
+  Future<void> _cancelBooking(String bookingId) async {
+    try {
+      await _appointmentService.cancelAppointment(bookingId);
+      await _reloadSchedule();
+      _showSuccess('התור עודכן בהצלחה');
+    } catch (e) {
+      _showError('שגיאה בעדכון התור: $e');
+    }
   }
 
   void _showBookingSettings() {

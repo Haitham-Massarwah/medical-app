@@ -10,18 +10,17 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('COMPREHENSIVE E2E TESTS - ALL FEATURES', () {
-    
     testWidgets('E2E-001: Complete login flow', (WidgetTester tester) async {
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Verify login screen loaded
       expect(find.text('מערכת תורים רפואיים'), findsOneWidget);
-      
+
       // Enter credentials
       final emailField = find.byType(TextFormField).first;
       final passwordField = find.byType(TextFormField).last;
-      
+
       await tester.enterText(emailField, 'admin@medical.com');
       await tester.enterText(passwordField, 'Admin@2024');
       await tester.pumpAndSettle();
@@ -39,7 +38,8 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login as admin
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -74,7 +74,8 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login as admin
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -105,12 +106,14 @@ void main() {
       print('✅ E2E-003: Add customer completed');
     });
 
-    testWidgets('E2E-004: Update user information', (WidgetTester tester) async {
+    testWidgets('E2E-004: Update user information',
+        (WidgetTester tester) async {
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login as admin
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -149,7 +152,8 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login as admin
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -176,15 +180,17 @@ void main() {
       print('✅ E2E-005: Remove user completed');
     });
 
-    testWidgets('E2E-006: Security - Access control test', (WidgetTester tester) async {
+    testWidgets('E2E-006: Security - Access control test',
+        (WidgetTester tester) async {
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Try to access security dashboard without login
       // Should redirect to login or show error
-      
+
       // Then login as admin
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -206,7 +212,8 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -226,13 +233,13 @@ void main() {
         if (find.text(buttonText).evaluate().isNotEmpty) {
           await tester.tap(find.text(buttonText));
           await tester.pumpAndSettle(const Duration(seconds: 2));
-          
+
           // Go back to home
           if (find.byIcon(Icons.arrow_back).evaluate().isNotEmpty) {
             await tester.tap(find.byIcon(Icons.arrow_back));
             await tester.pumpAndSettle(const Duration(seconds: 1));
           }
-          
+
           print('✅ Tested button: $buttonText');
         }
       }
@@ -245,7 +252,8 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -262,12 +270,14 @@ void main() {
       print('✅ E2E-008: System logs viewed');
     });
 
-    testWidgets('E2E-009: Security - Invalid login attempts', (WidgetTester tester) async {
+    testWidgets('E2E-009: Security - Invalid login attempts',
+        (WidgetTester tester) async {
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Try invalid credentials
-      await tester.enterText(find.byType(TextFormField).first, 'invalid@test.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'invalid@test.com');
       await tester.enterText(find.byType(TextFormField).last, 'wrongpassword');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 3));
@@ -278,30 +288,36 @@ void main() {
       print('✅ E2E-009: Invalid login handled correctly');
     });
 
-    testWidgets('E2E-010: Security - SQL injection attempt', (WidgetTester tester) async {
+    testWidgets('E2E-010: Security - SQL injection attempt',
+        (WidgetTester tester) async {
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Try SQL injection
-      await tester.enterText(find.byType(TextFormField).first, "admin' OR '1'='1");
-      await tester.enterText(find.byType(TextFormField).last, "admin' OR '1'='1");
+      await tester.enterText(
+          find.byType(TextFormField).first, "admin' OR '1'='1");
+      await tester.enterText(
+          find.byType(TextFormField).last, "admin' OR '1'='1");
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Should fail safely
-      expect(find.text('מערכת תורים רפואיים'), findsOneWidget); // Still on login page
+      expect(find.text('מערכת תורים רפואיים'),
+          findsOneWidget); // Still on login page
 
       print('✅ E2E-010: SQL injection prevented');
     });
   });
 
   group('FUNCTIONAL SCENARIO TESTS', () {
-    testWidgets('FS-001: Complete appointment booking flow', (WidgetTester tester) async {
+    testWidgets('FS-001: Complete appointment booking flow',
+        (WidgetTester tester) async {
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login as patient
-      await tester.enterText(find.byType(TextFormField).first, 'patient@test.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'patient@test.com');
       await tester.enterText(find.byType(TextFormField).last, 'Patient@123');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -320,7 +336,8 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Login as admin
-      await tester.enterText(find.byType(TextFormField).first, 'admin@medical.com');
+      await tester.enterText(
+          find.byType(TextFormField).first, 'admin@medical.com');
       await tester.enterText(find.byType(TextFormField).last, 'Admin@2024');
       await tester.tap(find.text('התחבר'));
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -333,7 +350,3 @@ void main() {
     });
   });
 }
-
-
-
-

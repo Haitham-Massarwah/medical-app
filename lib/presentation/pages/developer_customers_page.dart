@@ -35,44 +35,15 @@ class _DeveloperCustomersPageState extends State<DeveloperCustomersPage> {
         throw Exception(response['message'] ?? 'Failed to load customers');
       }
     } catch (e) {
-      // If API fails, show sample data so page isn't blank
       setState(() {
-        _customers = [
-          {
-            'id': '1',
-            'name': 'לקוח ישראלי',
-            'email': 'customer@test.com',
-            'phone': '050-1234567',
-            'address': 'תל אביב',
-            'dateJoined': '2024-01-01',
-            'totalAppointments': 5,
-          },
-          {
-            'id': '2',
-            'name': 'שרה כהן',
-            'email': 'sara.cohen@example.com',
-            'phone': '052-9876543',
-            'address': 'ירושלים',
-            'dateJoined': '2024-01-15',
-            'totalAppointments': 3,
-          },
-          {
-            'id': '3',
-            'name': 'דוד לוי',
-            'email': 'david.levi@example.com',
-            'phone': '054-5555555',
-            'address': 'חיפה',
-            'dateJoined': '2024-02-01',
-            'totalAppointments': 8,
-          },
-        ];
+        _customers = [];
         _isLoading = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('מציג נתונים לדוגמה (שגיאת API: $e)'),
-            backgroundColor: Colors.orange,
+            content: Text('שגיאה בטעינת משתמשים מהשרת: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -90,8 +61,11 @@ class _DeveloperCustomersPageState extends State<DeveloperCustomersPage> {
 
   @override
   Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context);
+    final isRTL = locale.languageCode == 'he' || locale.languageCode == 'ar';
+
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: isRTL ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('ניהול לקוחות'),

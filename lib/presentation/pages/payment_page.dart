@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/visa_mastercard_payment_service.dart';
 import '../../features/payments/data/models/payment_models.dart';
+import '../../services/api_service.dart';
 
 class PaymentPage extends StatefulWidget {
   final String appointmentId;
@@ -29,6 +30,7 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isProcessing = false;
   bool _saveCard = false;
   double _currentAmount = 0;
+  final ApiService _apiService = ApiService();
   
   final _cardNumberController = TextEditingController();
   final _expiryMonthController = TextEditingController();
@@ -510,28 +512,33 @@ class _PaymentPageState extends State<PaymentPage> {
     });
 
     try {
-      // Create card details model
-      final cardDetails = CardDetailsModel(
-        number: _cardNumberController.text.replaceAll(' ', ''),
-        expiryMonth: _expiryMonthController.text,
-        expiryYear: _expiryYearController.text,
-        cvv: _cvvController.text,
-        cardholderName: _cardNameController.text,
-        cardType: _selectedCardType,
-      );
+      // Create payment request with real backend API
+      final paymentRequest = {
+        'appointment_id': widget.appointmentId,
+        'amount': _currentAmount,
+        'currency': 'ILS',
+        'payment_method': _selectedCardType == PaymentMethod.visa ? 'visa' : 'mastercard',
+        'card_number': _cardNumberController.text.replaceAll(' ', ''),
+        'expiry_month': _expiryMonthController.text,
+        'expiry_year': _expiryYearController.text,
+        'cvv': _cvvController.text,
+        'cardholder_name': _cardNameController.text,
+        'save_card': _saveCard,
+      };
 
-      // Process payment through Visa/MasterCard gateway
-      final result = await VisaMastercardPaymentService.processPayment(
-        cardDetails: cardDetails,
-        amount: _currentAmount,
-        currency: 'ILS',
-        merchantId: 'MEDICAL_APP_${widget.appointmentId}',
-      );
+      // Process payment through real backend API
+      final result = await _apiService.post('/payments', paymentRequest);
 
-      if (result.success) {
-        _showSuccessDialog(result.transactionId ?? 'Unknown', '');
+      if (result['success'] == true) {
+        final data = result['data'];
+        final dataMap = data is Map<String, dynamic> ? data : null;
+        final transactionId =
+            dataMap?['transaction_id'] ?? dataMap?['id'] ?? 'Unknown';
+        final receiptNumber = dataMap?['receipt_number'] ?? '';
+        _showSuccessDialog(transactionId.toString(), receiptNumber.toString());
       } else {
-        _showErrorDialog(result.errorMessage ?? 'שגיאה לא ידועה');
+        final errorMessage = result['message'] ?? 'שגיאה לא ידועה';
+        _showErrorDialog(errorMessage);
       }
     } catch (e) {
       _showErrorDialog('שגיאה בעיבוד התשלום: $e');

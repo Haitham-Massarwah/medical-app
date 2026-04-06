@@ -4,6 +4,16 @@ import db from '../config/database';
 import { logger } from '../config/logger';
 
 export class AnalyticsController {
+  private async _hasPaymentsTable(): Promise<boolean> {
+    try {
+      return await db.schema.hasTable('payments');
+    } catch (e) {
+      // If schema introspection fails for any reason, fail safe by treating as missing.
+      logger.warn('Failed to check payments table existence; defaulting to no-payments.', e as any);
+      return false;
+    }
+  }
+
   /**
    * Get dashboard overview statistics
    * GET /api/v1/analytics/dashboard
@@ -14,17 +24,15 @@ export class AnalyticsController {
     // Get counts
     const [totalUsers] = await db('users')
       .where({ tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .count('* as count');
 
     const [totalDoctors] = await db('doctors')
       .where({ tenant_id: tenantId })
-      .andWhere('deleted_at', null)
+      .andWhere('is_active', true)
       .count('* as count');
 
     const [totalPatients] = await db('patients')
       .where({ tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .count('* as count');
 
     const [totalAppointments] = await db('appointments')
@@ -33,18 +41,22 @@ export class AnalyticsController {
 
     const [todayAppointments] = await db('appointments')
       .where({ tenant_id: tenantId })
-      .andWhere('appointment_date', new Date().toISOString().split('T')[0])
+      // appointment_date is a timestamp; compare by DATE() to avoid mismatched types
+      .andWhereRaw('DATE(appointment_date) = CURRENT_DATE')
       .count('* as count');
 
     const [completedAppointments] = await db('appointments')
       .where({ tenant_id: tenantId, status: 'completed' })
       .count('* as count');
 
-    const totalRevenueResult = await db('payments')
-      .where({ tenant_id: tenantId, status: 'succeeded' })
-      .sum('amount as total')
-      .first();
-    const totalRevenue = totalRevenueResult;
+    let totalRevenue = 0;
+    if (await this._hasPaymentsTable()) {
+      const totalRevenueResult = await db('payments')
+        .where({ tenant_id: tenantId, status: 'succeeded' })
+        .sum('amount as total')
+        .first();
+      totalRevenue = Number((totalRevenueResult as any)?.total || 0);
+    }
 
     res.status(200).json({
       status: 'success',
@@ -56,8 +68,68 @@ export class AnalyticsController {
           total_appointments: parseInt(totalAppointments.count as string),
           today_appointments: parseInt(todayAppointments.count as string),
           completed_appointments: parseInt(completedAppointments.count as string),
-          total_revenue: totalRevenue?.total || 0,
+          total_revenue: totalRevenue,
         },
+      },
+    });
+  });
+
+  /**
+   * Admin health summary: integrations + recent audit trail.
+   * GET /api/v1/analytics/admin-health
+   */
+  getAdminHealth = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const tenantId = req.tenantId!;
+
+    const hasIntegrationConnections = await db.schema.hasTable('integration_connections');
+    const hasIntegrationEvents = await db.schema.hasTable('integration_events');
+    const hasAuditLogs = await db.schema.hasTable('audit_logs');
+
+    let connectedIntegrations = 0;
+    let integrationErrors24h = 0;
+    let recentIntegrationEvents: any[] = [];
+    if (hasIntegrationConnections) {
+      const connected = await db('integration_connections')
+        .where({ tenant_id: tenantId, status: 'connected' })
+        .count('* as count')
+        .first();
+      connectedIntegrations = Number((connected as any)?.count || 0);
+    }
+    if (hasIntegrationEvents) {
+      const err = await db('integration_events')
+        .where({ tenant_id: tenantId, severity: 'error' })
+        .andWhere('created_at', '>=', db.raw("NOW() - INTERVAL '24 hours'"))
+        .count('* as count')
+        .first();
+      integrationErrors24h = Number((err as any)?.count || 0);
+
+      recentIntegrationEvents = await db('integration_events')
+        .where({ tenant_id: tenantId })
+        .orderBy('created_at', 'desc')
+        .limit(20)
+        .select('id', 'provider', 'event_type', 'severity', 'status', 'message', 'created_at');
+    }
+
+    let recentAudit: any[] = [];
+    if (hasAuditLogs) {
+      recentAudit = await db('audit_logs')
+        .where({ tenant_id: tenantId })
+        .orderBy('created_at', 'desc')
+        .limit(20)
+        .select('id', 'user_id', 'action', 'entity_type', 'entity_id', 'created_at');
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        summary: {
+          connected_integrations: connectedIntegrations,
+          integration_errors_24h: integrationErrors24h,
+          recent_integration_events: recentIntegrationEvents.length,
+          recent_audit_entries: recentAudit.length,
+        },
+        integration_events: recentIntegrationEvents,
+        audit_entries: recentAudit,
       },
     });
   });
@@ -111,40 +183,58 @@ export class AnalyticsController {
     const tenantId = req.tenantId!;
     const { start_date, end_date } = req.query;
 
-    let query = db('payments')
-      .where({ tenant_id: tenantId, status: 'succeeded' });
-
-    if (start_date) {
-      query = query.andWhere('created_at', '>=', start_date);
-    }
-    if (end_date) {
-      query = query.andWhere('created_at', '<=', end_date);
-    }
-
-    const [totals] = await query.clone()
-      .select(
-        db.raw('SUM(amount) as total_revenue'),
-        db.raw('COUNT(*) as total_transactions'),
-        db.raw('AVG(amount) as average_transaction')
-      )
-      .first();
-
-    // By date
-    const byDate = await query.clone()
-      .select(db.raw('DATE(created_at) as date'))
-      .sum('amount as revenue')
-      .count('* as transactions')
-      .groupBy(db.raw('DATE(created_at)'))
-      .orderBy('date', 'desc')
-      .limit(30);
-
-    res.status(200).json({
+    const empty = () => res.status(200).json({
       status: 'success',
       data: {
-        totals,
-        by_date: byDate,
+        totals: { total_revenue: 0, total_transactions: 0, average_transaction: 0 },
+        by_date: [],
       },
     });
+
+    if (!(await this._hasPaymentsTable())) {
+      return empty();
+    }
+
+    try {
+      let query = db('payments')
+        .where({ tenant_id: tenantId, status: 'succeeded' });
+
+      if (start_date) {
+        query = query.andWhere('created_at', '>=', start_date);
+      }
+      if (end_date) {
+        query = query.andWhere('created_at', '<=', end_date);
+      }
+
+      const totals = await query.clone()
+        .select(
+          db.raw('SUM(amount) as total_revenue'),
+          db.raw('COUNT(*) as total_transactions'),
+          db.raw('AVG(amount) as average_transaction')
+        )
+        .first();
+
+      // By date
+      const byDate = await query.clone()
+        .select(db.raw('DATE(created_at) as date'))
+        .sum('amount as revenue')
+        .count('* as transactions')
+        .groupBy(db.raw('DATE(created_at)'))
+        .orderBy('date', 'desc')
+        .limit(30);
+
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          totals: totals || { total_revenue: 0, total_transactions: 0, average_transaction: 0 },
+          by_date: byDate,
+        },
+      });
+    } catch (e) {
+      // Fail-safe: if the payments table exists but schema differs (missing columns), don't crash the dashboard.
+      logger.warn('Revenue analytics failed; returning empty revenue analytics.', e as any);
+      return empty();
+    }
   });
 
   /**
@@ -158,7 +248,7 @@ export class AnalyticsController {
       .join('users', 'doctors.user_id', 'users.id')
       .leftJoin('appointments', 'doctors.id', 'appointments.doctor_id')
       .where({ 'doctors.tenant_id': tenantId })
-      .andWhere('doctors.deleted_at', null)
+      .andWhere('doctors.is_active', true)
       .select(
         'doctors.id',
         'users.first_name',
@@ -309,7 +399,6 @@ export class AnalyticsController {
     // New users by month (last 12 months)
     const userGrowth = await db('users')
       .where({ tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .select(db.raw("TO_CHAR(created_at, 'YYYY-MM') as month"))
       .count('* as count')
       .groupBy(db.raw("TO_CHAR(created_at, 'YYYY-MM')"))
@@ -325,14 +414,17 @@ export class AnalyticsController {
       .orderBy('month', 'desc')
       .limit(12);
 
-    // Revenue by month
-    const revenueGrowth = await db('payments')
-      .where({ tenant_id: tenantId, status: 'succeeded' })
-      .select(db.raw("TO_CHAR(created_at, 'YYYY-MM') as month"))
-      .sum('amount as revenue')
-      .groupBy(db.raw("TO_CHAR(created_at, 'YYYY-MM')"))
-      .orderBy('month', 'desc')
-      .limit(12);
+    // Revenue by month (payments table may not exist yet)
+    let revenueGrowth: any[] = [];
+    if (await this._hasPaymentsTable()) {
+      revenueGrowth = await db('payments')
+        .where({ tenant_id: tenantId, status: 'succeeded' })
+        .select(db.raw("TO_CHAR(created_at, 'YYYY-MM') as month"))
+        .sum('amount as revenue')
+        .groupBy(db.raw("TO_CHAR(created_at, 'YYYY-MM')"))
+        .orderBy('month', 'desc')
+        .limit(12);
+    }
 
     res.status(200).json({
       status: 'success',
@@ -380,6 +472,10 @@ export class AnalyticsController {
         break;
 
       case 'revenue':
+        if (!(await this._hasPaymentsTable())) {
+          data = [];
+          break;
+        }
         data = await db('payments')
           .where({ tenant_id: tenantId, status: 'succeeded' })
           .select('id', 'amount', 'currency', 'created_at', 'payment_method');
@@ -423,14 +519,17 @@ export class AnalyticsController {
       )
       .first();
 
-    const [revenue] = await db('payments')
-      .where({ tenant_id: tenantId, status: 'succeeded' })
-      .andWhereBetween('created_at', [startDate, endDate])
-      .select(
-        db.raw('SUM(amount) as total'),
-        db.raw('COUNT(*) as transactions')
-      )
-      .first();
+    let revenue: any = { total: 0, transactions: 0 };
+    if (await this._hasPaymentsTable()) {
+      revenue = await db('payments')
+        .where({ tenant_id: tenantId, status: 'succeeded' })
+        .andWhereBetween('created_at', [startDate, endDate])
+        .select(
+          db.raw('SUM(amount) as total'),
+          db.raw('COUNT(*) as transactions')
+        )
+        .first();
+    }
 
     res.status(200).json({
       status: 'success',
@@ -447,9 +546,7 @@ export class AnalyticsController {
    * Get quarterly report
    * GET /api/v1/analytics/reports/quarterly
    */
-  getQuarterlyReport = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const tenantId = req.tenantId!;
-    
+  getQuarterlyReport = asyncHandler(async (_req: Request, res: Response, next: NextFunction) => {
     // Similar to monthly but for quarter
     res.status(200).json({
       status: 'success',
@@ -461,9 +558,7 @@ export class AnalyticsController {
    * Get yearly report
    * GET /api/v1/analytics/reports/yearly
    */
-  getYearlyReport = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    const tenantId = req.tenantId!;
-
+  getYearlyReport = asyncHandler(async (_req: Request, res: Response, next: NextFunction) => {
     // Similar to monthly but for year
     res.status(200).json({
       status: 'success',

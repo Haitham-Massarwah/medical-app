@@ -28,7 +28,7 @@ dependencies:
   # HTTP & API
   http: ^1.1.0
   dio: ^5.3.2
-  retrofit: ^4.0.3
+  retrofit: ^4.9.1
   json_annotation: ^4.8.1
   
   # Local Storage
@@ -39,7 +39,8 @@ dependencies:
   
   # Authentication & Security
   crypto: ^3.0.3
-  # local_auth: ^2.1.6
+  get_it: ^8.0.3
+  local_auth: ^2.3.0
   encrypt: ^5.0.1
   
   # Calendar & Date/Time
@@ -86,7 +87,7 @@ dev_dependencies:
   # Code Generation
   build_runner: ^2.4.7
   json_serializable: ^6.7.1
-  retrofit_generator: 10.2.1
+  retrofit_generator: ^10.2.3
 
   # Testing
   integration_test:

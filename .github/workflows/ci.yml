@@ -22,6 +22,10 @@ jobs:
 
       - run: flutter pub get
 
+      # *.g.dart is gitignored; CI must regenerate Retrofit / json_serializable output.
+      - name: Code generation
+        run: dart run build_runner build --delete-conflicting-outputs
+
       - name: Analyze
         run: flutter analyze lib test integration_test --no-fatal-infos
 
@@ -64,6 +68,9 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Code generation
+        run: dart run build_runner build --delete-conflicting-outputs
+
       - name: Build web
         run: flutter build web
 
@@ -86,6 +93,9 @@ jobs:
           cache: true
 
       - run: flutter pub get
+
+      - name: Code generation
+        run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Windows E2E harness (skipped unless RUN_FULL_E2E=true)
         run: >

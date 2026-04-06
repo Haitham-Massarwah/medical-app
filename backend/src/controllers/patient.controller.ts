@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import { asyncHandler, NotFoundError, ValidationError, AuthorizationError } from '../middleware/errorHandler';
 import db from '../config/database';
 import { logger } from '../config/logger';
+import path from 'path';
+import fs from 'fs';
 
 export class PatientController {
   /**
@@ -12,12 +14,11 @@ export class PatientController {
   getAllPatients = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const tenantId = req.tenantId!;
     const { page, limit, offset } = (req as any).pagination;
-    const { search, blood_type } = req.query;
+    const { search } = req.query;
 
     let query = db('patients')
       .join('users', 'patients.user_id', 'users.id')
-      .where('patients.tenant_id', tenantId)
-      .andWhere('patients.deleted_at', null);
+      .where('patients.tenant_id', tenantId);
 
     if (search) {
       query = query.andWhere(function() {
@@ -27,9 +28,6 @@ export class PatientController {
       });
     }
 
-    if (blood_type) {
-      query = query.andWhere('patients.blood_type', blood_type);
-    }
 
     const [{ count }] = await query.clone().count('patients.id as count');
 
@@ -40,8 +38,6 @@ export class PatientController {
         'users.last_name',
         'users.email',
         'users.phone',
-        'users.date_of_birth',
-        'users.gender'
       )
       .orderBy('patients.created_at', 'desc')
       .limit(limit)
@@ -73,17 +69,12 @@ export class PatientController {
       .join('users', 'patients.user_id', 'users.id')
       .where('patients.id', id)
       .andWhere('patients.tenant_id', tenantId)
-      .andWhere('patients.deleted_at', null)
       .select(
         'patients.*',
         'users.first_name',
         'users.last_name',
         'users.email',
-        'users.phone',
-        'users.date_of_birth',
-        'users.gender',
-        'users.address',
-        'users.city'
+        'users.phone'
       )
       .first();
 
@@ -107,8 +98,8 @@ export class PatientController {
     const tenantId = req.tenantId!;
     const creatorRole = req.user?.role || '';
     
-    // Only doctors, admins, and developers can create patients
-    if (!['doctor', 'admin', 'developer'].includes(creatorRole)) {
+    // Doctors, admins, developers, receptionists (SRS Rev 02 intake)
+    if (!['doctor', 'admin', 'developer', 'receptionist'].includes(creatorRole)) {
       throw new AuthorizationError('Only doctors and administrators can create patient accounts');
     }
 
@@ -118,13 +109,8 @@ export class PatientController {
       first_name,
       last_name,
       phone,
-      date_of_birth,
-      gender,
-      address,
-      city,
-      blood_type,
-      height,
-      weight,
+      address: _address,
+      city: _city,
       allergies,
       chronic_conditions,
       current_medications,
@@ -135,9 +121,12 @@ export class PatientController {
     } = req.body;
 
     // Check if user already exists
+    if (!email) {
+      throw new ValidationError('Email is required');
+    }
     const existingUser = await db('users')
-      .where({ email, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
+      .where('email', email)
+      .where('tenant_id', tenantId)
       .first();
 
     if (existingUser) {
@@ -157,14 +146,9 @@ export class PatientController {
           first_name,
           last_name,
           phone,
-          date_of_birth,
-          gender,
-          address,
-          city,
           role: 'patient',
           tenant_id: tenantId,
-          is_active: true,
-          email_verified: true, // Auto-verify when created by doctor
+          is_email_verified: false,
           created_at: new Date(),
           updated_at: new Date(),
         })
@@ -175,9 +159,6 @@ export class PatientController {
         .insert({
           user_id: user.id,
           tenant_id: tenantId,
-          blood_type,
-          height,
-          weight,
           allergies: allergies || [],
           chronic_conditions: chronic_conditions || [],
           current_medications: current_medications || [],
@@ -218,14 +199,23 @@ export class PatientController {
     const { id } = req.params;
     const tenantId = req.tenantId!;
 
+    // Filter out fields that don't exist in schema
+    const {
+      blood_type: _blood_type,
+      height: _height,
+      weight: _weight,
+      date_of_birth: _date_of_birth,
+      gender: _gender,
+      ...validFields
+    } = req.body;
+    
     const updateData: any = {
-      ...req.body,
+      ...validFields,
       updated_at: new Date(),
     };
 
     const [patient] = await db('patients')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .update(updateData)
       .returning('*');
 
@@ -254,7 +244,6 @@ export class PatientController {
 
     const patient = await db('patients')
       .where({ id, tenant_id: tenantId })
-      .andWhere('deleted_at', null)
       .first();
 
     if (!patient) {
@@ -263,7 +252,7 @@ export class PatientController {
 
     await db('patients')
       .where({ id })
-      .update({ deleted_at: new Date() });
+      .delete();
 
     logger.info(`Patient soft deleted: ${id}`);
 
@@ -271,6 +260,353 @@ export class PatientController {
       status: 'success',
       message: 'Patient deleted successfully',
     });
+  });
+
+  /**
+   * Add medical record
+   * POST /api/v1/patients/:id/medical-records
+   */
+  addMedicalRecord = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { id: patientId } = req.params;
+    const tenantId = req.tenantId!;
+    const role = req.user?.role || '';
+
+    const patient = await db('patients')
+      .where({ id: patientId, tenant_id: tenantId })
+      .first();
+
+    if (!patient) {
+      throw new NotFoundError('Patient');
+    }
+
+    let doctorId: string | null = null;
+    if (['doctor', 'paramedical'].includes(role)) {
+      const doctor = await db('doctors')
+        .where({ user_id: req.user!.userId, tenant_id: tenantId })
+        .first();
+      if (!doctor) {
+        throw new AuthorizationError('Doctor profile not found');
+      }
+      doctorId = doctor.id;
+    } else if (['admin', 'developer'].includes(role)) {
+      doctorId = req.body.doctor_id || null;
+    } else {
+      throw new AuthorizationError('Not allowed to add medical records');
+    }
+
+    const {
+      title,
+      description,
+      appointment_id,
+      record_type,
+      is_draft,
+      summary_format,
+    } = req.body;
+
+    const [record] = await db('medical_records')
+      .insert({
+        tenant_id: tenantId,
+        patient_id: patientId,
+        doctor_id: doctorId,
+        appointment_id: appointment_id || null,
+        title,
+        description,
+        record_type: record_type || 'session_summary',
+        summary_format: summary_format || 'markdown',
+        record_date: new Date(),
+        is_draft: is_draft === true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        record,
+      },
+    });
+  });
+
+  /**
+   * Update medical record
+   * PUT /api/v1/patients/:id/medical-records/:recordId
+   */
+  updateMedicalRecord = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { id: patientId, recordId } = req.params;
+    const tenantId = req.tenantId!;
+    const role = req.user?.role || '';
+
+    const record = await db('medical_records')
+      .where({ id: recordId, patient_id: patientId, tenant_id: tenantId })
+      .first();
+
+    if (!record) {
+      throw new NotFoundError('Medical record');
+    }
+
+    if (['doctor', 'paramedical'].includes(role)) {
+      const doctor = await db('doctors')
+        .where({ user_id: req.user!.userId, tenant_id: tenantId })
+        .first();
+      if (!doctor || record.doctor_id !== doctor.id) {
+        throw new AuthorizationError('You can only update your own records');
+      }
+    } else if (!['admin', 'developer'].includes(role)) {
+      throw new AuthorizationError('Not allowed to update medical records');
+    }
+
+    const updateData: any = {
+      updated_at: new Date(),
+    };
+    if (req.body.title !== undefined) updateData.title = req.body.title;
+    if (req.body.description !== undefined) updateData.description = req.body.description;
+    if (req.body.is_draft !== undefined) updateData.is_draft = req.body.is_draft === true;
+    if (req.body.record_type !== undefined) updateData.record_type = req.body.record_type;
+    if (req.body.summary_format !== undefined) updateData.summary_format = req.body.summary_format;
+
+    const [updated] = await db('medical_records')
+      .where({ id: recordId, patient_id: patientId, tenant_id: tenantId })
+      .update(updateData)
+      .returning('*');
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        record: updated,
+      },
+    });
+  });
+
+  /**
+   * Get patient medical records
+   * GET /api/v1/patients/:id/medical-records
+   */
+  getMedicalRecords = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { id: patientId } = req.params;
+    const tenantId = req.tenantId!;
+    const role = req.user?.role || '';
+    const userId = req.user?.userId || '';
+
+    const patient = await db('patients')
+      .where({ id: patientId, tenant_id: tenantId })
+      .first();
+
+    if (!patient) {
+      throw new NotFoundError('Patient');
+    }
+
+    let query = db('medical_records')
+      .where({ patient_id: patientId })
+      .andWhere('medical_records.tenant_id', tenantId)
+      .leftJoin('doctors as record_doctor', 'medical_records.doctor_id', 'record_doctor.id')
+      .leftJoin('users as author', 'record_doctor.user_id', 'author.id')
+      .select(
+        'medical_records.*',
+        'author.first_name as author_first_name',
+        'author.last_name as author_last_name',
+        'record_doctor.specialty as author_specialty'
+      )
+      .orderBy('medical_records.record_date', 'desc');
+
+    if (role === 'patient') {
+      if (patient.user_id !== userId) {
+        throw new AuthorizationError('You can only access your own records');
+      }
+      query = query.andWhere({ is_draft: false });
+    } else if (['doctor', 'paramedical'].includes(role)) {
+      const doctor = await db('doctors')
+        .where({ user_id: userId, tenant_id: tenantId })
+        .first();
+      if (!doctor) {
+        throw new AuthorizationError('Doctor profile not found');
+      }
+      if (doctor.specialty) {
+        query = query.andWhere('record_doctor.specialty', doctor.specialty);
+      } else {
+        query = query.andWhere('medical_records.doctor_id', doctor.id);
+      }
+      query = query.andWhere((builder: any) => {
+        builder.where({ is_draft: false }).orWhere({ doctor_id: doctor.id });
+      });
+    }
+
+    const records = await query;
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        records,
+      },
+    });
+  });
+
+  /**
+   * Get current patient medical records
+   * GET /api/v1/patients/me/medical-records
+   */
+  getMyMedicalRecords = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const tenantId = req.tenantId!;
+    const userId = req.user?.userId || '';
+
+    const patient = await db('patients')
+      .where({ user_id: userId, tenant_id: tenantId })
+      .first();
+
+    if (!patient) {
+      throw new NotFoundError('Patient');
+    }
+
+    const records = await db('medical_records')
+      .where({ patient_id: patient.id, is_draft: false })
+      .andWhere('medical_records.tenant_id', tenantId)
+      .leftJoin('doctors as record_doctor', 'medical_records.doctor_id', 'record_doctor.id')
+      .leftJoin('users as author', 'record_doctor.user_id', 'author.id')
+      .select(
+        'medical_records.*',
+        'author.first_name as author_first_name',
+        'author.last_name as author_last_name',
+        'record_doctor.specialty as author_specialty'
+      )
+      .orderBy('medical_records.record_date', 'desc');
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        records,
+      },
+    });
+  });
+
+  /**
+   * Upload medical record attachments
+   * POST /api/v1/patients/:id/medical-records/:recordId/attachments
+   */
+  uploadMedicalRecordAttachments = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { id: patientId, recordId } = req.params;
+    const tenantId = req.tenantId!;
+    const role = req.user?.role || '';
+    const userId = req.user?.userId || '';
+
+    const record = await db('medical_records')
+      .where({ id: recordId, patient_id: patientId, tenant_id: tenantId })
+      .first();
+
+    if (!record) {
+      throw new NotFoundError('Medical record');
+    }
+
+    if (role === 'patient') {
+      const patient = await db('patients')
+        .where({ id: patientId, tenant_id: tenantId })
+        .first();
+      if (!patient || patient.user_id !== userId) {
+        throw new AuthorizationError('You can only upload to your own records');
+      }
+      if (record.is_draft) {
+        throw new AuthorizationError('Cannot upload to draft records');
+      }
+    } else if (['doctor', 'paramedical'].includes(role)) {
+      const doctor = await db('doctors')
+        .where({ user_id: userId, tenant_id: tenantId })
+        .first();
+      if (!doctor || record.doctor_id !== doctor.id) {
+        throw new AuthorizationError('You can only upload to your own records');
+      }
+    } else if (!['admin', 'developer'].includes(role)) {
+      throw new AuthorizationError('Not allowed to upload attachments');
+    }
+
+    const files = (req as any).files as Express.Multer.File[];
+    if (!files || files.length == 0) {
+      throw new ValidationError('No files uploaded');
+    }
+
+    const attachmentUrls = files.map((file) => {
+      return `/api/v1/patients/${patientId}/medical-records/${recordId}/attachments/${file.filename}`;
+    });
+
+    const existingAttachments = Array.isArray(record.attachments) ? record.attachments : [];
+    const updatedAttachments = [...existingAttachments, ...attachmentUrls];
+
+    await db('medical_records')
+      .where({ id: recordId, tenant_id: tenantId })
+      .update({
+        attachments: updatedAttachments,
+        updated_at: new Date(),
+      });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        attachments: updatedAttachments,
+      },
+    });
+  });
+
+  /**
+   * Download medical record attachment
+   * GET /api/v1/patients/:id/medical-records/:recordId/attachments/:fileName
+   */
+  getMedicalRecordAttachment = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { id: patientId, recordId, fileName } = req.params;
+    const tenantId = req.tenantId!;
+    const role = req.user?.role || '';
+    const userId = req.user?.userId || '';
+
+    const record = await db('medical_records')
+      .where({ id: recordId, patient_id: patientId, tenant_id: tenantId })
+      .first();
+
+    if (!record) {
+      throw new NotFoundError('Medical record');
+    }
+
+    if (role === 'patient') {
+      const patient = await db('patients')
+        .where({ id: patientId, tenant_id: tenantId })
+        .first();
+      if (!patient || patient.user_id !== userId) {
+        throw new AuthorizationError('You can only access your own records');
+      }
+      if (record.is_draft) {
+        throw new AuthorizationError('Draft records are not accessible');
+      }
+    } else if (['doctor', 'paramedical'].includes(role)) {
+      const doctor = await db('doctors')
+        .where({ user_id: userId, tenant_id: tenantId })
+        .first();
+      if (!doctor) {
+        throw new AuthorizationError('Doctor profile not found');
+      }
+      if (doctor.specialty) {
+        const recordDoctor = await db('doctors')
+          .where({ id: record.doctor_id, tenant_id: tenantId })
+          .first();
+        if (!recordDoctor || recordDoctor.specialty !== doctor.specialty) {
+          throw new AuthorizationError('Access denied by specialty');
+        }
+      } else if (record.doctor_id !== doctor.id) {
+        throw new AuthorizationError('Access denied');
+      }
+    }
+
+    const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+    const expectedUrl = `/api/v1/patients/${patientId}/medical-records/${recordId}/attachments/${fileName}`;
+    if (!attachments.includes(expectedUrl)) {
+      throw new NotFoundError('Attachment');
+    }
+
+    const baseDir = path.resolve(process.cwd(), 'uploads', 'medical-records', recordId);
+    const filePath = path.resolve(baseDir, fileName);
+    if (!filePath.startsWith(baseDir)) {
+      throw new AuthorizationError('Invalid file path');
+    }
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundError('Attachment');
+    }
+
+    res.sendFile(filePath);
   });
 }
 

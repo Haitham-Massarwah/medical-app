@@ -1,8 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../models/treatment_models_simple.dart';
+import '../../services/appointment_service.dart';
 
 class DoctorCalendarPage extends StatefulWidget {
   const DoctorCalendarPage({super.key});
@@ -27,6 +28,53 @@ class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
     _selectedDay = _focusedDay;
     _selectedAppointments = ValueNotifier(_getAppointmentsForDay(_selectedDay!));
     _loadSettingsData();
+    _loadAppointmentsFromAPI();
+  }
+
+  Future<void> _loadAppointmentsFromAPI() async {
+    setState(() => _isLoadingAppointments = true);
+    try {
+      final appointments = await _appointmentService.getAppointments();
+      final appointmentsByDate = <DateTime, List<Appointment>>{};
+      
+      for (final apt in appointments) {
+        final aptDate = DateTime.tryParse(apt['appointment_date']?.toString() ?? '');
+        if (aptDate == null) continue;
+        
+        final dateOnly = DateTime(aptDate.year, aptDate.month, aptDate.day);
+        final patientName = apt['patientName'] ?? 
+                           (apt['first_name'] != null && apt['last_name'] != null 
+                             ? '${apt['first_name']} ${apt['last_name']}'.trim() 
+                             : apt['patient_id']?.toString() ?? 'Unknown');
+        
+        final appointment = Appointment(
+          id: apt['id']?.toString() ?? '',
+          patientName: patientName,
+          time: '${aptDate.hour.toString().padLeft(2, '0')}:${aptDate.minute.toString().padLeft(2, '0')}',
+          duration: apt['duration_minutes'] ?? 30,
+          type: apt['service_name'] ?? apt['treatment_type'] ?? 'טיפול',
+          status: apt['status']?.toString() ?? 'scheduled',
+          paymentStatus: apt['payment_status']?.toString() ?? 'pending',
+          amount: (apt['amount'] ?? apt['price'] ?? 0).toDouble(),
+          patientId: apt['patient_id']?.toString() ?? '',
+          treatmentTypeId: apt['service_id']?.toString() ?? apt['treatment_type_id']?.toString() ?? '',
+        );
+        
+        appointmentsByDate.putIfAbsent(dateOnly, () => []).add(appointment);
+      }
+      
+      setState(() {
+        _appointments.clear();
+        _appointments.addAll(appointmentsByDate);
+        _isLoadingAppointments = false;
+      });
+      
+      // Refresh selected day appointments
+      _selectedAppointments.value = _getAppointmentsForDay(_selectedDay!);
+    } catch (e) {
+      setState(() => _isLoadingAppointments = false);
+      print('Error loading appointments: $e');
+    }
   }
   
   // Load treatment types and break periods from settings
@@ -157,19 +205,16 @@ class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
     );
   }
   
-  // Mock vacation days - in real app, this would come from doctor profile
-  final Set<DateTime> _vacationDays = {
-    DateTime(2024, 1, 20), // Sunday
-    DateTime(2024, 1, 21), // Monday
-    DateTime(2024, 1, 22), // Tuesday
-    DateTime(2024, 2, 15), // Thursday
-    DateTime(2024, 2, 16), // Friday
-    DateTime(2024, 3, 10), // Sunday
-    DateTime(2024, 3, 11), // Monday
-  };
+  // Vacation days will be provided by API; start empty to avoid placeholders
+  final Set<DateTime> _vacationDays = {};
 
-  // Mock appointment data with more examples including payment status
-  final Map<DateTime, List<Appointment>> _appointments = {
+  // Live appointments will be loaded from API; start empty to avoid placeholders
+  final Map<DateTime, List<Appointment>> _appointments = {};
+  final AppointmentService _appointmentService = AppointmentService();
+  bool _isLoadingAppointments = false;
+
+  // Mock appointment data (unused) with more examples including payment status
+  final Map<DateTime, List<Appointment>> _mockAppointmentsData = {
     DateTime(2024, 1, 15): [
       Appointment(
         id: '1',
@@ -363,58 +408,10 @@ class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
   };
 
   @override
-  void dispose() {
-    _selectedAppointments.dispose();
-    super.dispose();
-  }
-
-  // Check if a day is enabled (not previous day or vacation day)
-  bool _isDayEnabled(DateTime day) {
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    final dayOnly = DateTime(day.year, day.month, day.day);
-    
-    // Disable previous days
-    if (dayOnly.isBefore(todayOnly)) {
-      return false;
-    }
-    
-    // Disable vacation days
-    if (_vacationDays.contains(dayOnly)) {
-      return false;
-    }
-    
-    return true;
-  }
-
-  // Refresh settings data from treatment settings page
-  void _refreshSettings() {
-    _loadSettingsData();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('×”×’×“×¨×•×ª ×¢×•×“×›× ×•: ${_selectedTreatmentTypes.length} ×˜×™×¤×•×œ×™×, ${_selectedBreakPeriods.length} ×”×¤×¡×§×•×ª'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  // Mock vacation days - in real app, this would come from doctor profile
-  final Set<DateTime> _vacationDays = {
-    DateTime(2024, 1, 20), // Sunday
-    DateTime(2024, 1, 21), // Monday
-    DateTime(2024, 1, 22), // Tuesday
-    DateTime(2024, 2, 15), // Thursday
-    DateTime(2024, 2, 16), // Friday
-    DateTime(2024, 3, 10), // Sunday
-    DateTime(2024, 3, 11), // Monday
-  };
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('×œ×•×— ×–×ž× ×™× - ×¨×•×¤×'),
+        title: const Text('×œ×•×— ×–×ž× ×™× - ×¨×•×¤×'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
@@ -492,10 +489,35 @@ class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addAppointment,
-        child: const Icon(Icons.add),
-        tooltip: '×”×•×¡×£ ×ª×•×¨ ×—×“×©',
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isLoadingAppointments)
+            FloatingActionButton(
+              onPressed: null,
+              child: const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              tooltip: 'טוען תורים...',
+            )
+          else
+            FloatingActionButton(
+              onPressed: () {
+                _loadAppointmentsFromAPI();
+              },
+              heroTag: 'refresh',
+              child: const Icon(Icons.refresh),
+              tooltip: 'רענן תורים',
+            ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            onPressed: _addAppointment,
+            child: const Icon(Icons.add),
+            tooltip: 'הוסף תור חדש',
+          ),
+        ],
       ),
     );
   }
@@ -864,8 +886,8 @@ class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
     );
   }
 
-  void _completeAppointment(Appointment appointment) {
-    Navigator.pushNamed(
+  void _completeAppointment(Appointment appointment) async {
+    final result = await Navigator.pushNamed(
       context,
       '/treatment-completion',
       arguments: {
@@ -877,6 +899,11 @@ class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
         'amount': appointment.amount,
       },
     );
+    
+    // Reload appointments after treatment completion to sync calendar
+    if (result == true) {
+      await _loadAppointmentsFromAPI();
+    }
   }
 
   void _startAppointment(Appointment appointment) {
@@ -888,13 +915,31 @@ class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
     );
   }
 
-  void _confirmAppointment(Appointment appointment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('×ª×•×¨ ×©×œ ${appointment.patientName} ××•×©×¨'),
-        backgroundColor: Colors.green,
-      ),
-    );
+  Future<void> _confirmAppointment(Appointment appointment) async {
+    try {
+      await _appointmentService.confirmAppointment(appointment.id);
+      
+      // Reload appointments to sync with calendar
+      await _loadAppointmentsFromAPI();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('תור של ${appointment.patientName} אושר והותאם ללוח שנה'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('שגיאה באישור התור: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _bookNextAppointment(Appointment appointment) {

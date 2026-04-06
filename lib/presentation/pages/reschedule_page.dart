@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'calendar_booking_page.dart';
+import '../../services/appointment_service.dart';
 
+// Reschedule page (web)
 class ReschedulePage extends StatefulWidget {
   final String appointmentId;
+  final String doctorId;
   final String doctorName;
   final String specialty;
   final DateTime currentDate;
@@ -11,6 +13,7 @@ class ReschedulePage extends StatefulWidget {
   const ReschedulePage({
     super.key,
     required this.appointmentId,
+    required this.doctorId,
     required this.doctorName,
     required this.specialty,
     required this.currentDate,
@@ -22,40 +25,76 @@ class ReschedulePage extends StatefulWidget {
 }
 
 class _ReschedulePageState extends State<ReschedulePage> {
+  final AppointmentService _appointmentService = AppointmentService();
+
   DateTime? _selectedDate;
   String? _selectedTimeSlot;
   bool _isLoading = false;
+  bool _isLoadingDates = false;
+  bool _isLoadingSlots = false;
+  List<DateTime> _availableDates = [];
+  List<String> _availableTimeSlots = [];
 
-  // Mock available dates (next 30 days)
-  List<DateTime> get _availableDates {
-    final today = DateTime.now();
-    final availableDates = <DateTime>[];
-    
-    for (int i = 1; i <= 30; i++) {
-      final date = today.add(Duration(days: i));
-      // Skip weekends for this example
-      if (date.weekday != DateTime.saturday && date.weekday != DateTime.sunday) {
-        availableDates.add(date);
-      }
-    }
-    
-    return availableDates;
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableDates();
   }
 
-  // Mock available time slots
-  List<String> get _availableTimeSlots {
-    if (_selectedDate == null) return [];
-    
-    // Different time slots based on day of week
-    if (_selectedDate!.weekday == DateTime.monday || _selectedDate!.weekday == DateTime.wednesday) {
-      return ['08:00', '09:30', '11:00', '14:00', '15:30', '17:00'];
-    } else if (_selectedDate!.weekday == DateTime.tuesday || _selectedDate!.weekday == DateTime.thursday) {
-      return ['09:00', '10:30', '12:00', '13:30', '15:00', '16:30'];
-    } else if (_selectedDate!.weekday == DateTime.friday) {
-      return ['08:30', '10:00', '11:30', '13:00'];
+  Future<void> _loadAvailableDates() async {
+    setState(() {
+      _isLoadingDates = true;
+    });
+
+    try {
+      if (widget.doctorId.isEmpty) {
+        throw Exception('Doctor ID is missing');
+      }
+      final now = DateTime.now();
+      final firstDay = DateTime(now.year, now.month, 1);
+      final lastDay = DateTime(now.year, now.month + 1, 0);
+      final dates = await _appointmentService.getAvailableDates(
+        widget.doctorId,
+        firstDay,
+        lastDay,
+      );
+      setState(() {
+        _availableDates = dates;
+      });
+    } catch (_) {
+      setState(() {
+        _availableDates = [];
+      });
+    } finally {
+      setState(() {
+        _isLoadingDates = false;
+      });
     }
-    
-    return [];
+  }
+
+  Future<void> _loadTimeSlots(DateTime date) async {
+    setState(() {
+      _isLoadingSlots = true;
+      _availableTimeSlots = [];
+    });
+
+    try {
+      final slots = await _appointmentService.getAvailableTimeSlots(
+        widget.doctorId,
+        date,
+      );
+      setState(() {
+        _availableTimeSlots = slots;
+      });
+    } catch (_) {
+      setState(() {
+        _availableTimeSlots = [];
+      });
+    } finally {
+      setState(() {
+        _isLoadingSlots = false;
+      });
+    }
   }
 
   @override
@@ -237,42 +276,46 @@ class _ReschedulePageState extends State<ReschedulePage> {
                 ),
               ),
               const SizedBox(height: 16),
-              
-              // Time Slots Grid
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _availableTimeSlots.map((timeSlot) {
-                  final isSelected = _selectedTimeSlot == timeSlot;
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedTimeSlot = timeSlot;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.orange : Colors.white,
-                        border: Border.all(
-                          color: isSelected ? Colors.orange : Colors.grey.shade300,
+
+              if (_isLoadingSlots)
+                const Center(child: CircularProgressIndicator())
+              else if (_availableTimeSlots.isEmpty)
+                const Text('אין שעות פנויות לתאריך זה')
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _availableTimeSlots.map((timeSlot) {
+                    final isSelected = _selectedTimeSlot == timeSlot;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedTimeSlot = timeSlot;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        timeSlot,
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black,
-                          fontWeight: FontWeight.bold,
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.orange : Colors.white,
+                          border: Border.all(
+                            color: isSelected ? Colors.orange : Colors.grey.shade300,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          timeSlot,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.black,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                    );
+                  }).toList(),
+                ),
               
               const SizedBox(height: 32),
               
@@ -375,7 +418,7 @@ class _ReschedulePageState extends State<ReschedulePage> {
     // Add days of the month
     for (int day = 1; day <= lastDayOfMonth.day; day++) {
       final date = DateTime(today.year, today.month, day);
-      final isAvailable = _availableDates.any((d) => 
+      final isAvailable = _availableDates.any((d) =>
           d.year == date.year && d.month == date.month && d.day == day);
       final isSelected = _selectedDate != null &&
           _selectedDate!.year == date.year &&
@@ -386,12 +429,15 @@ class _ReschedulePageState extends State<ReschedulePage> {
       currentWeek.add(
         Expanded(
           child: GestureDetector(
-            onTap: isAvailable && !isPast ? () {
-              setState(() {
-                _selectedDate = date;
-                _selectedTimeSlot = null; // Reset time selection
-              });
-            } : null,
+            onTap: isAvailable && !isPast
+                ? () {
+                    setState(() {
+                      _selectedDate = date;
+                      _selectedTimeSlot = null; // Reset time selection
+                    });
+                    _loadTimeSlots(date);
+                  }
+                : null,
             child: Container(
               margin: const EdgeInsets.all(2),
               height: 40,
@@ -470,24 +516,48 @@ class _ReschedulePageState extends State<ReschedulePage> {
       _isLoading = true;
     });
 
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final timeParts = _selectedTimeSlot!.split(':');
+      final hour = int.tryParse(timeParts[0]) ?? 0;
+      final minute = int.tryParse(timeParts[1]) ?? 0;
+      final newDateTime = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        hour,
+        minute,
+      );
 
-    setState(() {
-      _isLoading = false;
-    });
+      await _appointmentService.rescheduleAppointment(
+        appointmentId: widget.appointmentId,
+        newDateTime: newDateTime,
+      );
 
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('התור נדחה בהצלחה ל${_formatDate(_selectedDate!)} בשעה $_selectedTimeSlot'),
-        backgroundColor: Colors.green,
-      ),
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('התור נדחה בהצלחה ל${_formatDate(_selectedDate!)} בשעה $_selectedTimeSlot'),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-    // Navigate back to appointments page
-    Navigator.of(context).pop();
-    Navigator.of(context).pushNamed('/appointments');
+      Navigator.of(context).pop();
+      Navigator.of(context).pushNamed('/appointments');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('שגיאה בדחיית התור: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 }
 

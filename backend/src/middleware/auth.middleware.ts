@@ -57,13 +57,21 @@ export const authenticate = asyncHandler(
         throw new Error('Server configuration error');
       }
 
-      const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+      const decoded = jwt.verify(token, jwtSecret) as JwtPayload & {
+        user_id?: string;
+        tenant_id?: string;
+      };
 
       // Attach user to request
+      decoded.userId = decoded.userId || decoded.id || decoded.user_id;
+      const resolvedTenantId = decoded.tenantId || decoded.tenant_id;
+      if (resolvedTenantId) {
+        decoded.tenantId = resolvedTenantId;
+      }
       req.user = decoded;
       req.tenantId = decoded.tenantId;
 
-      logger.debug(`User authenticated: ${decoded.userId} (${decoded.role})`);
+      logger.debug(`User authenticated: ${decoded.id || decoded.userId} (${decoded.role})`);
 
       next();
     } catch (error) {

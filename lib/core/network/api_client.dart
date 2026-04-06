@@ -1,3 +1,5 @@
+import 'dart:io' show File, Platform;
+
 import 'package:dio/dio.dart';
 import 'package:retrofit/retrofit.dart';
 import 'package:json_annotation/json_annotation.dart';
@@ -8,6 +10,8 @@ import '../../features/doctors/data/models/doctor_models.dart';
 import '../../features/patients/data/models/patient_models.dart';
 import '../../features/payments/data/models/payment_models.dart';
 import '../../features/notifications/data/models/notification_models.dart';
+
+import 'api_extra_models.dart';
 
 part 'api_client.g.dart';
 
@@ -296,7 +300,7 @@ abstract class ApiClient {
 }
 
 // Common Response Models
-@JsonSerializable()
+@JsonSerializable(genericArgumentFactories: true)
 class PaginatedResponse<T> {
   final List<T> data;
   final int total;

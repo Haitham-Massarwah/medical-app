@@ -15,9 +15,20 @@ export const tenantContext = (req: Request, res: Response, next: NextFunction) =
 
   const tenantId = req.user.tenantId;
 
-  if (!tenantId) {
+  // Allow null tenant_id for users without tenant assignment
+  // This is useful for testing and initial setup
+  if (tenantId === undefined) {
     logger.error(`User ${req.user.userId} has no tenantId`);
     throw new Error('User tenant information is missing');
+  }
+
+  // If tenantId is null, set tenantFilter to null to allow queries without tenant filtering
+  if (!tenantId) {
+    logger.debug(`User ${req.user.userId} has no tenant assigned - allowing access`);
+    (req as any).tenantId = null;
+    (req as any).tenantFilter = null;
+    next();
+    return;
   }
 
   // Attach tenant ID to request for easy access

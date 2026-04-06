@@ -238,6 +238,56 @@ const generateEmailHTML = (template: string, data: any): string => {
         </html>
       `;
 
+    case 'admin-approval-required':
+      return `
+        <!DOCTYPE html>
+        <html>
+        <head>${baseStyle}</head>
+        <body>
+          <div class="header">
+            <h1>🔔 New Registration Requires Approval</h1>
+          </div>
+          <div class="content">
+            <h2>Hi ${data.adminName},</h2>
+            <p>A new ${data.userRole} has verified their email and is waiting for your approval:</p>
+            <div style="background: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <p><strong>Name:</strong> ${data.userName}</p>
+              <p><strong>Email:</strong> ${data.userEmail}</p>
+              <p><strong>Role:</strong> ${data.userRole}</p>
+              <p><strong>User ID:</strong> ${data.userId}</p>
+            </div>
+            <p>Please log in to the admin dashboard to review and approve this registration.</p>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:8081'}/admin" class="button">Review Registration</a>
+          </div>
+          <div class="footer">
+            <p>This is an automated notification from the Medical Appointment System.</p>
+          </div>
+        </body>
+        </html>
+      `;
+
+    case 'account-approved':
+      return `
+        <!DOCTYPE html>
+        <html>
+        <head>${baseStyle}</head>
+        <body>
+          <div class="header">
+            <h1>🏥 Medical Appointment System</h1>
+          </div>
+          <div class="content">
+            <h2>Hi ${data.name || 'User'},</h2>
+            <p>Your account has been approved by an administrator.</p>
+            <p>You can now log in and start using the system.</p>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:8081'}" class="button">Open App</a>
+          </div>
+          <div class="footer">
+            <p>This is an automated message from the Medical Appointment System.</p>
+          </div>
+        </body>
+        </html>
+      `;
+
     default:
       return `
         <!DOCTYPE html>

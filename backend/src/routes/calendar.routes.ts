@@ -28,8 +28,8 @@ router.get('/google/callback', async (req, res) => {
       `);
     }
 
-    const userId = parseInt(state as string, 10);
-    if (isNaN(userId)) {
+    const userId = (state as string) || '';
+    if (!userId) {
       return res.status(400).send(`
         <html>
           <head><title>Error</title></head>
@@ -97,8 +97,8 @@ router.get('/outlook/callback', async (req, res) => {
       `);
     }
 
-    const userId = parseInt(state as string, 10);
-    if (isNaN(userId)) {
+    const userId = (state as string) || '';
+    if (!userId) {
       return res.status(400).send(`
         <html>
           <head><title>Error</title></head>
@@ -235,7 +235,7 @@ router.post('/disconnect', async (req, res) => {
       });
     }
 
-    await calendarService.disconnectCalendar(parseInt(userId, 10), provider);
+    await calendarService.disconnectCalendar(userId, provider);
 
     res.json({
       success: true,
@@ -265,7 +265,7 @@ router.get('/status', async (req, res) => {
       });
     }
 
-    const status = await calendarService.getConnectionStatus(parseInt(userId, 10));
+    const status = await calendarService.getConnectionStatus(userId);
 
     res.json({
       success: true,

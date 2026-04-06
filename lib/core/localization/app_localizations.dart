@@ -10,7 +10,12 @@ class AppLocalizations {
   AppLocalizations(this.locale);
 
   static AppLocalizations of(BuildContext context) {
-    return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
+    final localizations = Localizations.of<AppLocalizations>(context, AppLocalizations);
+    if (localizations != null) {
+      return localizations;
+    }
+    // Fallback to English if not found
+    return AppLocalizations(const Locale('en', 'US'));
   }
 
   static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
@@ -24,195 +29,472 @@ class AppLocalizations {
 
   static const List<Locale> supportedLocales = AppConstants.supportedLocales;
 
+  // Helper method to safely get localized values with fallback to English
+  String _getLocalizedValue(String key) {
+    final langCode = locale.languageCode;
+    return _localizedValues[langCode]?[key] ?? 
+           _localizedValues['en']?[key] ?? 
+           key; // Fallback to key if not found
+  }
+
   // Common
-  String get appTitle => _localizedValues[locale.languageCode]!['appTitle']!;
-  String get loading => _localizedValues[locale.languageCode]!['loading']!;
-  String get error => _localizedValues[locale.languageCode]!['error']!;
-  String get success => _localizedValues[locale.languageCode]!['success']!;
-  String get cancel => _localizedValues[locale.languageCode]!['cancel']!;
-  String get confirm => _localizedValues[locale.languageCode]!['confirm']!;
-  String get save => _localizedValues[locale.languageCode]!['save']!;
-  String get delete => _localizedValues[locale.languageCode]!['delete']!;
-  String get edit => _localizedValues[locale.languageCode]!['edit']!;
-  String get add => _localizedValues[locale.languageCode]!['add']!;
-  String get search => _localizedValues[locale.languageCode]!['search']!;
-  String get filter => _localizedValues[locale.languageCode]!['filter']!;
-  String get sort => _localizedValues[locale.languageCode]!['sort']!;
-  String get refresh => _localizedValues[locale.languageCode]!['refresh']!;
-  String get retry => _localizedValues[locale.languageCode]!['retry']!;
-  String get back => _localizedValues[locale.languageCode]!['back']!;
-  String get next => _localizedValues[locale.languageCode]!['next']!;
-  String get previous => _localizedValues[locale.languageCode]!['previous']!;
-  String get close => _localizedValues[locale.languageCode]!['close']!;
-  String get done => _localizedValues[locale.languageCode]!['done']!;
-  String get yes => _localizedValues[locale.languageCode]!['yes']!;
-  String get no => _localizedValues[locale.languageCode]!['no']!;
-  String get ok => _localizedValues[locale.languageCode]!['ok']!;
+  String get appTitle => _getLocalizedValue('appTitle');
+  String get loading => _getLocalizedValue('loading');
+  String get error => _getLocalizedValue('error');
+  String get success => _getLocalizedValue('success');
+  String get cancel => _getLocalizedValue('cancel');
+  String get confirm => _getLocalizedValue('confirm');
+  String get save => _getLocalizedValue('save');
+  String get delete => _getLocalizedValue('delete');
+  String get edit => _getLocalizedValue('edit');
+  String get add => _getLocalizedValue('add');
+  String get search => _getLocalizedValue('search');
+  String get filter => _getLocalizedValue('filter');
+  String get sort => _getLocalizedValue('sort');
+  String get refresh => _getLocalizedValue('refresh');
+  String get retry => _getLocalizedValue('retry');
+  String get back => _getLocalizedValue('back');
+  String get next => _getLocalizedValue('next');
+  String get previous => _getLocalizedValue('previous');
+  String get close => _getLocalizedValue('close');
+  String get optional => _getLocalizedValue('optional');
+  String get useCurrentLocation => _getLocalizedValue('useCurrentLocation');
+  String get openInGoogleMaps => _getLocalizedValue('openInGoogleMaps');
+  String get openInWaze => _getLocalizedValue('openInWaze');
+  String get enterLocationManually => _getLocalizedValue('enterLocationManually');
+  String get done => _getLocalizedValue('done');
+  String get yes => _getLocalizedValue('yes');
+  String get no => _getLocalizedValue('no');
+  String get ok => _getLocalizedValue('ok');
 
   // Authentication
-  String get login => _localizedValues[locale.languageCode]!['login']!;
-  String get logout => _localizedValues[locale.languageCode]!['logout']!;
-  String get register => _localizedValues[locale.languageCode]!['register']!;
-  String get email => _localizedValues[locale.languageCode]!['email']!;
-  String get password => _localizedValues[locale.languageCode]!['password']!;
-  String get confirmPassword => _localizedValues[locale.languageCode]!['confirmPassword']!;
-  String get forgotPassword => _localizedValues[locale.languageCode]!['forgotPassword']!;
-  String get resetPassword => _localizedValues[locale.languageCode]!['resetPassword']!;
-  String get changePassword => _localizedValues[locale.languageCode]!['changePassword']!;
-  String get currentPassword => _localizedValues[locale.languageCode]!['currentPassword']!;
-  String get newPassword => _localizedValues[locale.languageCode]!['newPassword']!;
-  String get verifyEmail => _localizedValues[locale.languageCode]!['verifyEmail']!;
-  String get resendVerification => _localizedValues[locale.languageCode]!['resendVerification']!;
-  String get twoFactorAuth => _localizedValues[locale.languageCode]!['twoFactorAuth']!;
-  String get enableTwoFactor => _localizedValues[locale.languageCode]!['enableTwoFactor']!;
-  String get disableTwoFactor => _localizedValues[locale.languageCode]!['disableTwoFactor']!;
-  String get verificationCode => _localizedValues[locale.languageCode]!['verificationCode']!;
+  String get login => _getLocalizedValue('login');
+  String get logout => _getLocalizedValue('logout');
+  String get register => _getLocalizedValue('register');
+  String get email => _getLocalizedValue('email');
+  String get password => _getLocalizedValue('password');
+  String get confirmPassword => _getLocalizedValue('confirmPassword');
+  String get forgotPassword => _getLocalizedValue('forgotPassword');
+  String get resetPassword => _getLocalizedValue('resetPassword');
+  String get resetPasswordSubtitle => _getLocalizedValue('resetPasswordSubtitle');
+  String get changePassword => _getLocalizedValue('changePassword');
+  String get currentPassword => _getLocalizedValue('currentPassword');
+  String get newPassword => _getLocalizedValue('newPassword');
+  String get verifyEmail => _getLocalizedValue('verifyEmail');
+  String get resendVerification => _getLocalizedValue('resendVerification');
+  String get twoFactorAuth => _getLocalizedValue('twoFactorAuth');
+  String get enableTwoFactor => _getLocalizedValue('enableTwoFactor');
+  String get disableTwoFactor => _getLocalizedValue('disableTwoFactor');
+  String get verificationCode => _getLocalizedValue('verificationCode');
+  String get loginToYourAccount => _getLocalizedValue('loginToYourAccount');
+  String get dontHaveAccount => _getLocalizedValue('dontHaveAccount');
+  String get medicalAppointmentSystem => _getLocalizedValue('medicalAppointmentSystem');
+  String get systemTagline => _getLocalizedValue('systemTagline');
+  String get registerToSystem => _getLocalizedValue('registerToSystem');
+  String get iWantToRegisterAs => _getLocalizedValue('iWantToRegisterAs');
+  String get agreeToTerms => _getLocalizedValue('agreeToTerms');
+  String get termsAndPrivacy => _getLocalizedValue('termsAndPrivacy');
+  String get agreeToTermsPatient => _getLocalizedValue('agreeToTermsPatient');
+  String get agreeToTermsDoctor => _getLocalizedValue('agreeToTermsDoctor');
+  String get alreadyHaveAccount => _getLocalizedValue('alreadyHaveAccount');
+  String get loginHere => _getLocalizedValue('loginHere');
+  String get licenseNumber => _getLocalizedValue('licenseNumber');
+  String get specialty => _getLocalizedValue('specialty');
+  String get specialtyRequired => _getLocalizedValue('specialtyRequired');
+  String get clinicAddress => _getLocalizedValue('clinicAddress');
+  String get street => _getLocalizedValue('street');
+  // Note: city and country are already declared in User Profile section (line 345-346)
+  String get paymentInformation => _getLocalizedValue('paymentInformation');
+  String get visaCardNumber => _getLocalizedValue('visaCardNumber');
+  String get cardHolderName => _getLocalizedValue('cardHolderName');
+  String get expiryDate => _getLocalizedValue('expiryDate');
+  String get cvv => _getLocalizedValue('cvv');
+  String get idNumber => _getLocalizedValue('idNumber');
+  String get verificationNotice => _getLocalizedValue('verificationNotice');
+  String get adminApprovalRequired => _getLocalizedValue('adminApprovalRequired');
+  String get doctorApprovalNotice => _getLocalizedValue('doctorApprovalNotice');
+  String get doctorOrTherapist => _getLocalizedValue('doctorOrTherapist');
+  String get paymentInfoDescription => _getLocalizedValue('paymentInfoDescription');
+  String get selectLocation => _getLocalizedValue('selectLocation');
+  String get selectSpecialties => _getLocalizedValue('selectSpecialties');
+  
+  // Specialty names
+  String get specialtyOsteopath => _getLocalizedValue('specialtyOsteopath');
+  String get specialtyPhysiotherapist => _getLocalizedValue('specialtyPhysiotherapist');
+  String get specialtyDentist => _getLocalizedValue('specialtyDentist');
+  String get specialtyDentalHygienist => _getLocalizedValue('specialtyDentalHygienist');
+  String get specialtyMassageTherapist => _getLocalizedValue('specialtyMassageTherapist');
+  String get specialtyAcupuncturist => _getLocalizedValue('specialtyAcupuncturist');
+  String get specialtyPsychologist => _getLocalizedValue('specialtyPsychologist');
+  String get specialtyNutritionist => _getLocalizedValue('specialtyNutritionist');
+  String get specialtyGeneralPractitioner => _getLocalizedValue('specialtyGeneralPractitioner');
+  String get specialtySpecialist => _getLocalizedValue('specialtySpecialist');
+  
+  Map<String, String> getSpecialtyName(String key) {
+    final specialties = {
+      // Medical Specialties
+      'general_practitioner': {
+        'he': 'רופא כללי',
+        'ar': 'طبيب عام',
+        'en': 'General Practitioner',
+      },
+      'cardiologist': {
+        'he': 'קרדיולוג',
+        'ar': 'طبيب قلب',
+        'en': 'Cardiologist',
+      },
+      'neurologist': {
+        'he': 'נוירולוג',
+        'ar': 'طبيب أعصاب',
+        'en': 'Neurologist',
+      },
+      'orthopedist': {
+        'he': 'אורתופד',
+        'ar': 'طبيب عظام',
+        'en': 'Orthopedist',
+      },
+      'dermatologist': {
+        'he': 'דרמטולוג',
+        'ar': 'طبيب جلدية',
+        'en': 'Dermatologist',
+      },
+      'gynecologist': {
+        'he': 'גינקולוג',
+        'ar': 'طبيب نساء وتوليد',
+        'en': 'Gynecologist',
+      },
+      'pediatrician': {
+        'he': 'רופא ילדים',
+        'ar': 'طبيب أطفال',
+        'en': 'Pediatrician',
+      },
+      'psychiatrist': {
+        'he': 'פסיכיאטר',
+        'ar': 'طبيب نفسي',
+        'en': 'Psychiatrist',
+      },
+      'ophthalmologist': {
+        'he': 'רופא עיניים',
+        'ar': 'طبيب عيون',
+        'en': 'Ophthalmologist',
+      },
+      'otolaryngologist': {
+        'he': 'רופא א.א.ג',
+        'ar': 'طبيب أنف وأذن وحنجرة',
+        'en': 'Otolaryngologist',
+      },
+      'urologist': {
+        'he': 'אורולוג',
+        'ar': 'طبيب مسالك بولية',
+        'en': 'Urologist',
+      },
+      'gastroenterologist': {
+        'he': 'גסטרואנטרולוג',
+        'ar': 'طبيب جهاز هضمي',
+        'en': 'Gastroenterologist',
+      },
+      'endocrinologist': {
+        'he': 'אנדוקרינולוג',
+        'ar': 'طبيب غدد صماء',
+        'en': 'Endocrinologist',
+      },
+      'pulmonologist': {
+        'he': 'רופא ריאות',
+        'ar': 'طبيب رئة',
+        'en': 'Pulmonologist',
+      },
+      'rheumatologist': {
+        'he': 'ראומטולוג',
+        'ar': 'طبيب روماتيزم',
+        'en': 'Rheumatologist',
+      },
+      'oncologist': {
+        'he': 'אונקולוג',
+        'ar': 'طبيب أورام',
+        'en': 'Oncologist',
+      },
+      'anesthesiologist': {
+        'he': 'רופא מרדים',
+        'ar': 'طبيب تخدير',
+        'en': 'Anesthesiologist',
+      },
+      'surgeon': {
+        'he': 'מנתח',
+        'ar': 'جراح',
+        'en': 'Surgeon',
+      },
+      'internal_medicine': {
+        'he': 'רפואה פנימית',
+        'ar': 'طب باطني',
+        'en': 'Internal Medicine',
+      },
+      'emergency_medicine': {
+        'he': 'רפואה דחופה',
+        'ar': 'طب الطوارئ',
+        'en': 'Emergency Medicine',
+      },
+      // Paramedical Specialties
+      'osteopath': {
+        'he': 'אוסטאופת',
+        'ar': 'معالج تقويم العظام',
+        'en': 'Osteopath',
+      },
+      'physiotherapist': {
+        'he': 'פיזיותרפיסט',
+        'ar': 'أخصائي علاج طبيعي',
+        'en': 'Physiotherapist',
+      },
+      'dentist': {
+        'he': 'רופא שיניים',
+        'ar': 'طبيب أسنان',
+        'en': 'Dentist',
+      },
+      'dental_hygienist': {
+        'he': 'שיננית',
+        'ar': 'أخصائي صحة الأسنان',
+        'en': 'Dental Hygienist',
+      },
+      'massage_therapist': {
+        'he': 'מעסה',
+        'ar': 'معالج تدليك',
+        'en': 'Massage Therapist',
+      },
+      'acupuncturist': {
+        'he': 'מטפל בדיקור',
+        'ar': 'أخصائي الوخز بالإبر',
+        'en': 'Acupuncturist',
+      },
+      'psychologist': {
+        'he': 'פסיכולוג',
+        'ar': 'طبيب نفسي',
+        'en': 'Psychologist',
+      },
+      'nutritionist': {
+        'he': 'דיאטנית',
+        'ar': 'أخصائي تغذية',
+        'en': 'Nutritionist',
+      },
+      'speech_therapist': {
+        'he': 'קלינאי תקשורת',
+        'ar': 'أخصائي نطق',
+        'en': 'Speech Therapist',
+      },
+      'occupational_therapist': {
+        'he': 'מרפא בעיסוק',
+        'ar': 'أخصائي علاج وظيفي',
+        'en': 'Occupational Therapist',
+      },
+      'chiropractor': {
+        'he': 'כירופרקט',
+        'ar': 'معالج تقويم العمود الفقري',
+        'en': 'Chiropractor',
+      },
+      'naturopath': {
+        'he': 'נטורופת',
+        'ar': 'معالج طبيعي',
+        'en': 'Naturopath',
+      },
+      'homeopath': {
+        'he': 'הומאופת',
+        'ar': 'معالج بالطب المثلي',
+        'en': 'Homeopath',
+      },
+      'podiatrist': {
+        'he': 'פודיאטר',
+        'ar': 'طبيب أقدام',
+        'en': 'Podiatrist',
+      },
+      'optometrist': {
+        'he': 'אופטומטריסט',
+        'ar': 'أخصائي فحص النظر',
+        'en': 'Optometrist',
+      },
+      'audiologist': {
+        'he': 'קלינאי שמיעה',
+        'ar': 'أخصائي سمع',
+        'en': 'Audiologist',
+      },
+      'radiologist_technician': {
+        'he': 'טכנאי רנטגן',
+        'ar': 'فني أشعة',
+        'en': 'Radiologist Technician',
+      },
+      'medical_laboratory_technician': {
+        'he': 'טכנאי מעבדה רפואית',
+        'ar': 'فني مختبر طبي',
+        'en': 'Medical Laboratory Technician',
+      },
+      'pharmacy_technician': {
+        'he': 'טכנאי רוקחות',
+        'ar': 'فني صيدلة',
+        'en': 'Pharmacy Technician',
+      },
+    };
+    return {
+      'he': specialties[key]?['he'] ?? key,
+      'ar': specialties[key]?['ar'] ?? key,
+      'en': specialties[key]?['en'] ?? key,
+    };
+  }
 
   // User Profile
-  String get profile => _localizedValues[locale.languageCode]!['profile']!;
-  String get firstName => _localizedValues[locale.languageCode]!['firstName']!;
-  String get lastName => _localizedValues[locale.languageCode]!['lastName']!;
-  String get fullName => _localizedValues[locale.languageCode]!['fullName']!;
-  String get phone => _localizedValues[locale.languageCode]!['phone']!;
-  String get address => _localizedValues[locale.languageCode]!['address']!;
-  String get city => _localizedValues[locale.languageCode]!['city']!;
-  String get country => _localizedValues[locale.languageCode]!['country']!;
-  String get language => _localizedValues[locale.languageCode]!['language']!;
-  String get theme => _localizedValues[locale.languageCode]!['theme']!;
-  String get notifications => _localizedValues[locale.languageCode]!['notifications']!;
-  String get privacy => _localizedValues[locale.languageCode]!['privacy']!;
-  String get settings => _localizedValues[locale.languageCode]!['settings']!;
+  String get profile => _getLocalizedValue('profile');
+  String get firstName => _getLocalizedValue('firstName');
+  String get lastName => _getLocalizedValue('lastName');
+  String get fullName => _getLocalizedValue('fullName');
+  String get phone => _getLocalizedValue('phone');
+  String get mobileOnly => _getLocalizedValue('mobileOnly');
+  String get mobilePhoneHint => _getLocalizedValue('mobilePhoneHint');
+  String get username => _getLocalizedValue('username');
+  String get address => _getLocalizedValue('address');
+  String get city => _getLocalizedValue('city');
+  String get country => _getLocalizedValue('country');
+  String get language => _getLocalizedValue('language');
+  String get theme => _getLocalizedValue('theme');
+  String get notifications => _getLocalizedValue('notifications');
+  String get privacy => _getLocalizedValue('privacy');
+  String get settings => _getLocalizedValue('settings');
 
   // Medical Specialties
-  String get osteopath => _localizedValues[locale.languageCode]!['osteopath']!;
-  String get physiotherapist => _localizedValues[locale.languageCode]!['physiotherapist']!;
-  String get dentist => _localizedValues[locale.languageCode]!['dentist']!;
-  String get dentalHygienist => _localizedValues[locale.languageCode]!['dentalHygienist']!;
-  String get massageTherapist => _localizedValues[locale.languageCode]!['massageTherapist']!;
-  String get acupuncturist => _localizedValues[locale.languageCode]!['acupuncturist']!;
-  String get psychologist => _localizedValues[locale.languageCode]!['psychologist']!;
-  String get nutritionist => _localizedValues[locale.languageCode]!['nutritionist']!;
-  String get generalPractitioner => _localizedValues[locale.languageCode]!['generalPractitioner']!;
-  String get specialist => _localizedValues[locale.languageCode]!['specialist']!;
+  String get osteopath => _getLocalizedValue('osteopath');
+  String get physiotherapist => _getLocalizedValue('physiotherapist');
+  String get dentist => _getLocalizedValue('dentist');
+  String get dentalHygienist => _getLocalizedValue('dentalHygienist');
+  String get massageTherapist => _getLocalizedValue('massageTherapist');
+  String get acupuncturist => _getLocalizedValue('acupuncturist');
+  String get psychologist => _getLocalizedValue('psychologist');
+  String get nutritionist => _getLocalizedValue('nutritionist');
+  String get generalPractitioner => _getLocalizedValue('generalPractitioner');
+  String get specialist => _getLocalizedValue('specialist');
 
   // Appointments
-  String get appointments => _localizedValues[locale.languageCode]!['appointments']!;
-  String get appointment => _localizedValues[locale.languageCode]!['appointment']!;
-  String get bookAppointment => _localizedValues[locale.languageCode]!['bookAppointment']!;
-  String get cancelAppointment => _localizedValues[locale.languageCode]!['cancelAppointment']!;
-  String get rescheduleAppointment => _localizedValues[locale.languageCode]!['rescheduleAppointment']!;
-  String get confirmAppointment => _localizedValues[locale.languageCode]!['confirmAppointment']!;
-  String get appointmentDate => _localizedValues[locale.languageCode]!['appointmentDate']!;
-  String get appointmentTime => _localizedValues[locale.languageCode]!['appointmentTime']!;
-  String get appointmentDuration => _localizedValues[locale.languageCode]!['appointmentDuration']!;
-  String get appointmentStatus => _localizedValues[locale.languageCode]!['appointmentStatus']!;
-  String get scheduled => _localizedValues[locale.languageCode]!['scheduled']!;
-  String get confirmed => _localizedValues[locale.languageCode]!['confirmed']!;
-  String get completed => _localizedValues[locale.languageCode]!['completed']!;
-  String get cancelled => _localizedValues[locale.languageCode]!['cancelled']!;
-  String get noShow => _localizedValues[locale.languageCode]!['noShow']!;
-  String get rescheduled => _localizedValues[locale.languageCode]!['rescheduled']!;
+  String get appointments => _getLocalizedValue('appointments');
+  String get appointment => _getLocalizedValue('appointment');
+  String get bookAppointment => _getLocalizedValue('bookAppointment');
+  String get cancelAppointment => _getLocalizedValue('cancelAppointment');
+  String get rescheduleAppointment => _getLocalizedValue('rescheduleAppointment');
+  String get confirmAppointment => _getLocalizedValue('confirmAppointment');
+  String get appointmentDate => _getLocalizedValue('appointmentDate');
+  String get appointmentTime => _getLocalizedValue('appointmentTime');
+  String get appointmentDuration => _getLocalizedValue('appointmentDuration');
+  String get appointmentStatus => _getLocalizedValue('appointmentStatus');
+  String get scheduled => _getLocalizedValue('scheduled');
+  String get confirmed => _getLocalizedValue('confirmed');
+  String get completed => _getLocalizedValue('completed');
+  String get cancelled => _getLocalizedValue('cancelled');
+  String get noShow => _getLocalizedValue('noShow');
+  String get rescheduled => _getLocalizedValue('rescheduled');
 
   // Doctors
-  String get doctors => _localizedValues[locale.languageCode]!['doctors']!;
-  String get doctor => _localizedValues[locale.languageCode]!['doctor']!;
-  String get paramedical => _localizedValues[locale.languageCode]!['paramedical']!;
-  String get availability => _localizedValues[locale.languageCode]!['availability']!;
-  String get workingHours => _localizedValues[locale.languageCode]!['workingHours']!;
-  String get experience => _localizedValues[locale.languageCode]!['experience']!;
-  String get education => _localizedValues[locale.languageCode]!['education']!;
-  String get certifications => _localizedValues[locale.languageCode]!['certifications']!;
-  String get languages => _localizedValues[locale.languageCode]!['languages']!;
-  String get reviews => _localizedValues[locale.languageCode]!['reviews']!;
-  String get rating => _localizedValues[locale.languageCode]!['rating']!;
-  String get location => _localizedValues[locale.languageCode]!['location']!;
-  String get telehealth => _localizedValues[locale.languageCode]!['telehealth']!;
-  String get inPerson => _localizedValues[locale.languageCode]!['inPerson']!;
+  String get doctors => _getLocalizedValue('doctors');
+  String get doctor => _getLocalizedValue('doctor');
+  String get paramedical => _getLocalizedValue('paramedical');
+  String get availability => _getLocalizedValue('availability');
+  String get workingHours => _getLocalizedValue('workingHours');
+  String get experience => _getLocalizedValue('experience');
+  String get education => _getLocalizedValue('education');
+  String get certifications => _getLocalizedValue('certifications');
+  String get languages => _getLocalizedValue('languages');
+  String get reviews => _getLocalizedValue('reviews');
+  String get rating => _getLocalizedValue('rating');
+  String get location => _getLocalizedValue('location');
+  String get telehealth => _getLocalizedValue('telehealth');
+  String get inPerson => _getLocalizedValue('inPerson');
 
   // Patients
-  String get patients => _localizedValues[locale.languageCode]!['patients']!;
-  String get patient => _localizedValues[locale.languageCode]!['patient']!;
-  String get medicalHistory => _localizedValues[locale.languageCode]!['medicalHistory']!;
-  String get medicalRecords => _localizedValues[locale.languageCode]!['medicalRecords']!;
-  String get allergies => _localizedValues[locale.languageCode]!['allergies']!;
-  String get medications => _localizedValues[locale.languageCode]!['medications']!;
-  String get emergencyContact => _localizedValues[locale.languageCode]!['emergencyContact']!;
-  String get insurance => _localizedValues[locale.languageCode]!['insurance']!;
-  String get insuranceNumber => _localizedValues[locale.languageCode]!['insuranceNumber']!;
+  String get patients => _getLocalizedValue('patients');
+  String get patient => _getLocalizedValue('patient');
+  String get medicalHistory => _getLocalizedValue('medicalHistory');
+  String get medicalRecords => _getLocalizedValue('medicalRecords');
+  String get allergies => _getLocalizedValue('allergies');
+  String get medications => _getLocalizedValue('medications');
+  String get emergencyContact => _getLocalizedValue('emergencyContact');
+  String get insurance => _getLocalizedValue('insurance');
+  String get insuranceNumber => _getLocalizedValue('insuranceNumber');
 
   // Payments
-  String get payments => _localizedValues[locale.languageCode]!['payments']!;
-  String get payment => _localizedValues[locale.languageCode]!['payment']!;
-  String get amount => _localizedValues[locale.languageCode]!['amount']!;
-  String get currency => _localizedValues[locale.languageCode]!['currency']!;
-  String get paymentMethod => _localizedValues[locale.languageCode]!['paymentMethod']!;
-  String get creditCard => _localizedValues[locale.languageCode]!['creditCard']!;
-  String get debitCard => _localizedValues[locale.languageCode]!['debitCard']!;
-  String get bankTransfer => _localizedValues[locale.languageCode]!['bankTransfer']!;
-  String get cash => _localizedValues[locale.languageCode]!['cash']!;
-  String get deposit => _localizedValues[locale.languageCode]!['deposit']!;
-  String get refund => _localizedValues[locale.languageCode]!['refund']!;
-  String get receipt => _localizedValues[locale.languageCode]!['receipt']!;
-  String get invoice => _localizedValues[locale.languageCode]!['invoice']!;
-  String get pending => _localizedValues[locale.languageCode]!['pending']!;
-  String get failed => _localizedValues[locale.languageCode]!['failed']!;
-  String get refunded => _localizedValues[locale.languageCode]!['refunded']!;
+  String get payments => _getLocalizedValue('payments');
+  String get payment => _getLocalizedValue('payment');
+  String get amount => _getLocalizedValue('amount');
+  String get currency => _getLocalizedValue('currency');
+  String get paymentMethod => _getLocalizedValue('paymentMethod');
+  String get creditCard => _getLocalizedValue('creditCard');
+  String get debitCard => _getLocalizedValue('debitCard');
+  String get bankTransfer => _getLocalizedValue('bankTransfer');
+  String get cash => _getLocalizedValue('cash');
+  String get deposit => _getLocalizedValue('deposit');
+  String get refund => _getLocalizedValue('refund');
+  String get receipt => _getLocalizedValue('receipt');
+  String get invoice => _getLocalizedValue('invoice');
+  String get pending => _getLocalizedValue('pending');
+  String get failed => _getLocalizedValue('failed');
+  String get refunded => _getLocalizedValue('refunded');
 
   // Notifications
-  String get reminder => _localizedValues[locale.languageCode]!['reminder']!;
-  String get confirmation => _localizedValues[locale.languageCode]!['confirmation']!;
-  String get cancellation => _localizedValues[locale.languageCode]!['cancellation']!;
-  String get reschedule => _localizedValues[locale.languageCode]!['reschedule']!;
-  String get emailNotification => _localizedValues[locale.languageCode]!['emailNotification']!;
-  String get smsNotification => _localizedValues[locale.languageCode]!['smsNotification']!;
-  String get whatsappNotification => _localizedValues[locale.languageCode]!['whatsappNotification']!;
-  String get pushNotification => _localizedValues[locale.languageCode]!['pushNotification']!;
+  String get reminder => _getLocalizedValue('reminder');
+  String get confirmation => _getLocalizedValue('confirmation');
+  String get cancellation => _getLocalizedValue('cancellation');
+  String get reschedule => _getLocalizedValue('reschedule');
+  String get emailNotification => _getLocalizedValue('emailNotification');
+  String get smsNotification => _getLocalizedValue('smsNotification');
+  String get whatsappNotification => _getLocalizedValue('whatsappNotification');
+  String get pushNotification => _getLocalizedValue('pushNotification');
+  
+  // Dashboard Metrics
+  String get upcomingAppointments => _getLocalizedValue('upcomingAppointments');
+  String get newMessages => _getLocalizedValue('newMessages');
+  String get newPatientsThisMonth => _getLocalizedValue('newPatientsThisMonth');
+  String get messages => _getLocalizedValue('messages');
+  String get status => _getLocalizedValue('status');
+  String get viewAll => _getLocalizedValue('viewAll');
+  String get noAppointmentsFound => _getLocalizedValue('noAppointmentsFound');
+  String get noMessagesFound => _getLocalizedValue('noMessagesFound');
 
   // Calendar
-  String get calendar => _localizedValues[locale.languageCode]!['calendar']!;
-  String get today => _localizedValues[locale.languageCode]!['today']!;
-  String get tomorrow => _localizedValues[locale.languageCode]!['tomorrow']!;
-  String get yesterday => _localizedValues[locale.languageCode]!['yesterday']!;
-  String get thisWeek => _localizedValues[locale.languageCode]!['thisWeek']!;
-  String get nextWeek => _localizedValues[locale.languageCode]!['nextWeek']!;
-  String get thisMonth => _localizedValues[locale.languageCode]!['thisMonth']!;
-  String get nextMonth => _localizedValues[locale.languageCode]!['nextMonth']!;
-  String get date => _localizedValues[locale.languageCode]!['date']!;
-  String get time => _localizedValues[locale.languageCode]!['time']!;
-  String get duration => _localizedValues[locale.languageCode]!['duration']!;
-  String get minutes => _localizedValues[locale.languageCode]!['minutes']!;
-  String get hours => _localizedValues[locale.languageCode]!['hours']!;
-  String get days => _localizedValues[locale.languageCode]!['days']!;
-  String get weeks => _localizedValues[locale.languageCode]!['weeks']!;
-  String get months => _localizedValues[locale.languageCode]!['months']!;
-  String get years => _localizedValues[locale.languageCode]!['years']!;
+  String get calendar => _getLocalizedValue('calendar');
+  String get today => _getLocalizedValue('today');
+  String get tomorrow => _getLocalizedValue('tomorrow');
+  String get yesterday => _getLocalizedValue('yesterday');
+  String get thisWeek => _getLocalizedValue('thisWeek');
+  String get nextWeek => _getLocalizedValue('nextWeek');
+  String get thisMonth => _getLocalizedValue('thisMonth');
+  String get nextMonth => _getLocalizedValue('nextMonth');
+  String get date => _getLocalizedValue('date');
+  String get time => _getLocalizedValue('time');
+  String get duration => _getLocalizedValue('duration');
+  String get minutes => _getLocalizedValue('minutes');
+  String get hours => _getLocalizedValue('hours');
+  String get days => _getLocalizedValue('days');
+  String get weeks => _getLocalizedValue('weeks');
+  String get months => _getLocalizedValue('months');
+  String get years => _getLocalizedValue('years');
 
   // Validation Messages
-  String get requiredField => _localizedValues[locale.languageCode]!['requiredField']!;
-  String get invalidEmail => _localizedValues[locale.languageCode]!['invalidEmail']!;
-  String get invalidPhone => _localizedValues[locale.languageCode]!['invalidPhone']!;
-  String get passwordTooShort => _localizedValues[locale.languageCode]!['passwordTooShort']!;
-  String get passwordsDoNotMatch => _localizedValues[locale.languageCode]!['passwordsDoNotMatch']!;
-  String get invalidDate => _localizedValues[locale.languageCode]!['invalidDate']!;
-  String get invalidTime => _localizedValues[locale.languageCode]!['invalidTime']!;
-  String get pastDateNotAllowed => _localizedValues[locale.languageCode]!['pastDateNotAllowed']!;
-  String get tooFarInFuture => _localizedValues[locale.languageCode]!['tooFarInFuture']!;
+  String get requiredField => _getLocalizedValue('requiredField');
+  String get invalidEmail => _getLocalizedValue('invalidEmail');
+  String get invalidPhone => _getLocalizedValue('invalidPhone');
+  String get passwordTooShort => _getLocalizedValue('passwordTooShort');
+  String get passwordsDoNotMatch => _getLocalizedValue('passwordsDoNotMatch');
+  String get invalidDate => _getLocalizedValue('invalidDate');
+  String get invalidTime => _getLocalizedValue('invalidTime');
+  String get pastDateNotAllowed => _getLocalizedValue('pastDateNotAllowed');
+  String get tooFarInFuture => _getLocalizedValue('tooFarInFuture');
 
   // Error Messages
-  String get networkError => _localizedValues[locale.languageCode]!['networkError']!;
-  String get serverError => _localizedValues[locale.languageCode]!['serverError']!;
-  String get unauthorizedError => _localizedValues[locale.languageCode]!['unauthorizedError']!;
-  String get forbiddenError => _localizedValues[locale.languageCode]!['forbiddenError']!;
-  String get notFoundError => _localizedValues[locale.languageCode]!['notFoundError']!;
-  String get validationError => _localizedValues[locale.languageCode]!['validationError']!;
-  String get unknownError => _localizedValues[locale.languageCode]!['unknownError']!;
+  String get networkError => _getLocalizedValue('networkError');
+  String get serverError => _getLocalizedValue('serverError');
+  String get unauthorizedError => _getLocalizedValue('unauthorizedError');
+  String get forbiddenError => _getLocalizedValue('forbiddenError');
+  String get notFoundError => _getLocalizedValue('notFoundError');
+  String get validationError => _getLocalizedValue('validationError');
+  String get unknownError => _getLocalizedValue('unknownError');
 
   // Success Messages
-  String get appointmentBookedSuccess => _localizedValues[locale.languageCode]!['appointmentBookedSuccess']!;
-  String get appointmentCancelledSuccess => _localizedValues[locale.languageCode]!['appointmentCancelledSuccess']!;
-  String get appointmentRescheduledSuccess => _localizedValues[locale.languageCode]!['appointmentRescheduledSuccess']!;
-  String get paymentCompletedSuccess => _localizedValues[locale.languageCode]!['paymentCompletedSuccess']!;
-  String get profileUpdatedSuccess => _localizedValues[locale.languageCode]!['profileUpdatedSuccess']!;
+  String get appointmentBookedSuccess => _getLocalizedValue('appointmentBookedSuccess');
+  String get appointmentCancelledSuccess => _getLocalizedValue('appointmentCancelledSuccess');
+  String get appointmentRescheduledSuccess => _getLocalizedValue('appointmentRescheduledSuccess');
+  String get paymentCompletedSuccess => _getLocalizedValue('paymentCompletedSuccess');
+  String get profileUpdatedSuccess => _getLocalizedValue('profileUpdatedSuccess');
 
   // Format date and time
   String formatDate(DateTime date) {
@@ -252,6 +534,11 @@ class AppLocalizations {
       'next': 'הבא',
       'previous': 'הקודם',
       'close': 'סגירה',
+      'optional': 'אופציונלי',
+      'useCurrentLocation': 'השתמש במיקום הנוכחי',
+      'openInGoogleMaps': 'פתח ב-Google Maps',
+      'openInWaze': 'פתח ב-Waze',
+      'enterLocationManually': 'הזן מיקום ידנית',
       'done': 'סיום',
       'yes': 'כן',
       'no': 'לא',
@@ -266,6 +553,7 @@ class AppLocalizations {
       'confirmPassword': 'אישור סיסמה',
       'forgotPassword': 'שכחתי סיסמה',
       'resetPassword': 'איפוס סיסמה',
+      'resetPasswordSubtitle': 'הזן את כתובת האימייל שלך ונשלח לך קישור לאיפוס הסיסמה',
       'changePassword': 'שינוי סיסמה',
       'currentPassword': 'סיסמה נוכחית',
       'newPassword': 'סיסמה חדשה',
@@ -275,6 +563,38 @@ class AppLocalizations {
       'enableTwoFactor': 'הפעלת אימות דו-שלבי',
       'disableTwoFactor': 'ביטול אימות דו-שלבי',
       'verificationCode': 'קוד אימות',
+      'loginToYourAccount': 'התחבר לחשבון שלך',
+      'dontHaveAccount': 'אין לך חשבון? הירשם עכשיו',
+      'medicalAppointmentSystem': 'מערכת תורים רפואיים',
+      'systemTagline': 'בריאותך היא העדיפות שלנו',
+      'registerToSystem': 'הרשמה למערכת',
+      'iWantToRegisterAs': 'אני רוצה להירשם כ:',
+      'agreeToTerms': 'אני מסכים לתנאי השימוש ומדיניות הפרטיות',
+      'termsAndPrivacy': 'תנאי השימוש ומדיניות הפרטיות',
+      'agreeToTermsPatient': 'אני מסכים לתנאי השימוש ומדיניות הפרטיות למטופלים',
+      'agreeToTermsDoctor': 'אני מסכים לתנאי השימוש ומדיניות הפרטיות לרופאים/מטפלים',
+      'alreadyHaveAccount': 'יש לך כבר חשבון?',
+      'loginHere': 'התחבר כאן',
+      'licenseNumber': 'מספר רישיון',
+      'specialty': 'התמחות',
+      'specialtyRequired': 'נא לבחור לפחות התמחות אחת',
+      'clinicAddress': 'כתובת הקליניקה',
+      'street': 'רחוב',
+      'city': 'עיר',
+      'country': 'מדינה',
+      'paymentInformation': 'פרטי תשלום לאימות',
+      'visaCardNumber': 'מספר כרטיס אשראי (Visa)',
+      'cardHolderName': 'שם בעל הכרטיס',
+      'expiryDate': 'תאריך תפוגה (MM/YY)',
+      'cvv': 'קוד אבטחה (CVV)',
+      'idNumber': 'מספר תעודת זהות',
+      'verificationNotice': 'המידע נדרש לאימות זהותך כרופא מורשה',
+      'adminApprovalRequired': 'נדרש אישור מנהל',
+      'doctorApprovalNotice': 'רישום כרופא/מטפל דורש אישור מנהל. לאחר הרישום, חשבונך ייבדק ואושר תוך 24-48 שעות.',
+      'doctorOrTherapist': 'רופא/מטפל',
+      'paymentInfoDescription': 'פרטי תשלום להגדרת חשבון ולקבלת תשלומים',
+      'selectLocation': 'בחר מיקום',
+      'selectSpecialties': 'בחר התמחויות',
       
       // Medical Specialties
       'osteopath': 'אוסטאופת',
@@ -361,6 +681,16 @@ class AppLocalizations {
       'whatsappNotification': 'התראה בווטסאפ',
       'pushNotification': 'התראה באפליקציה',
       
+      // Dashboard Metrics
+      'upcomingAppointments': 'תורים קרובים',
+      'newMessages': 'הודעות חדשות',
+      'newPatientsThisMonth': 'מטופלים חדשים החודש',
+      'messages': 'הודעות',
+      'status': 'סטטוס',
+      'viewAll': 'הצג הכל',
+      'noAppointmentsFound': 'אין תורים להצגה',
+      'noMessagesFound': 'אין הודעות',
+      
       // Calendar
       'calendar': 'יומן',
       'today': 'היום',
@@ -384,6 +714,8 @@ class AppLocalizations {
       'requiredField': 'שדה חובה',
       'invalidEmail': 'כתובת אימייל לא תקינה',
       'invalidPhone': 'מספר טלפון לא תקין',
+      'mobileOnly': 'נייד בלבד',
+      'mobilePhoneHint': 'יש להזין מספר נייד בלבד (05X-XXXXXXX)',
       'passwordTooShort': 'הסיסמה קצרה מדי',
       'passwordsDoNotMatch': 'הסיסמאות אינן תואמות',
       'invalidDate': 'תאריך לא תקין',
@@ -427,6 +759,11 @@ class AppLocalizations {
       'next': 'التالي',
       'previous': 'السابق',
       'close': 'إغلاق',
+      'optional': 'اختياري',
+      'useCurrentLocation': 'استخدم الموقع الحالي',
+      'openInGoogleMaps': 'افتح في Google Maps',
+      'openInWaze': 'افتح في Waze',
+      'enterLocationManually': 'أدخل الموقع يدوياً',
       'done': 'تم',
       'yes': 'نعم',
       'no': 'لا',
@@ -441,6 +778,7 @@ class AppLocalizations {
       'confirmPassword': 'تأكيد كلمة المرور',
       'forgotPassword': 'نسيت كلمة المرور',
       'resetPassword': 'إعادة تعيين كلمة المرور',
+      'resetPasswordSubtitle': 'أدخل عنوان بريدك الإلكتروني وسنرسل لك رابط إعادة تعيين كلمة المرور',
       'changePassword': 'تغيير كلمة المرور',
       'currentPassword': 'كلمة المرور الحالية',
       'newPassword': 'كلمة المرور الجديدة',
@@ -450,6 +788,38 @@ class AppLocalizations {
       'enableTwoFactor': 'تفعيل المصادقة الثنائية',
       'disableTwoFactor': 'إلغاء المصادقة الثنائية',
       'verificationCode': 'رمز التحقق',
+      'loginToYourAccount': 'تسجيل الدخول إلى حسابك',
+      'dontHaveAccount': 'ليس لديك حساب؟ سجل الآن',
+      'medicalAppointmentSystem': 'نظام المواعيد الطبية',
+      'systemTagline': 'صحتك هي أولويتنا',
+      'registerToSystem': 'إنشاء حساب',
+      'iWantToRegisterAs': 'أريد التسجيل كـ:',
+      'agreeToTerms': 'أوافق على شروط الاستخدام وسياسة الخصوصية',
+      'termsAndPrivacy': 'شروط الاستخدام وسياسة الخصوصية',
+      'agreeToTermsPatient': 'أوافق على شروط الاستخدام وسياسة الخصوصية للمرضى',
+      'agreeToTermsDoctor': 'أوافق على شروط الاستخدام وسياسة الخصوصية للأطباء/المعالجين',
+      'alreadyHaveAccount': 'هل لديك حساب بالفعل؟',
+      'loginHere': 'تسجيل الدخول هنا',
+      'licenseNumber': 'رقم الترخيص',
+      'specialty': 'التخصص',
+      'specialtyRequired': 'يرجى اختيار تخصص واحد على الأقل',
+      'clinicAddress': 'عنوان العيادة',
+      'street': 'شارع',
+      'city': 'مدينة',
+      'country': 'دولة',
+      'paymentInformation': 'معلومات الدفع للتحقق',
+      'visaCardNumber': 'رقم بطاقة فيزا',
+      'cardHolderName': 'اسم حامل البطاقة',
+      'expiryDate': 'تاريخ الانتهاء (MM/YY)',
+      'cvv': 'رمز الأمان (CVV)',
+      'idNumber': 'رقم الهوية',
+      'verificationNotice': 'هذه المعلومات مطلوبة للتحقق من هويتك كطبيب مرخص',
+      'adminApprovalRequired': 'يتطلب موافقة المدير',
+      'doctorApprovalNotice': 'التسجيل كطبيب/معالج يتطلب موافقة المدير. بعد التسجيل، سيتم مراجعة حسابك والموافقة عليه خلال 24-48 ساعة.',
+      'doctorOrTherapist': 'طبيب/معالج',
+      'paymentInfoDescription': 'معلومات الدفع لإعداد الحساب واستلام المدفوعات',
+      'selectLocation': 'اختر الموقع',
+      'selectSpecialties': 'اختر التخصصات',
       
       // Medical Specialties
       'osteopath': 'أخصائي العظام',
@@ -536,6 +906,16 @@ class AppLocalizations {
       'whatsappNotification': 'إشعار واتساب',
       'pushNotification': 'إشعار التطبيق',
       
+      // Dashboard Metrics
+      'upcomingAppointments': 'المواعيد القادمة',
+      'newMessages': 'رسائل جديدة',
+      'newPatientsThisMonth': 'مرضى جدد هذا الشهر',
+      'messages': 'الرسائل',
+      'status': 'الحالة',
+      'viewAll': 'عرض الكل',
+      'noAppointmentsFound': 'لا توجد مواعيد للعرض',
+      'noMessagesFound': 'لا توجد رسائل',
+      
       // Calendar
       'calendar': 'التقويم',
       'today': 'اليوم',
@@ -559,6 +939,8 @@ class AppLocalizations {
       'requiredField': 'حقل مطلوب',
       'invalidEmail': 'عنوان بريد إلكتروني غير صحيح',
       'invalidPhone': 'رقم هاتف غير صحيح',
+      'mobileOnly': 'جوال فقط',
+      'mobilePhoneHint': 'يرجى إدخال رقم جوال فقط (05X-XXXXXXX)',
       'passwordTooShort': 'كلمة المرور قصيرة جداً',
       'passwordsDoNotMatch': 'كلمات المرور غير متطابقة',
       'invalidDate': 'تاريخ غير صحيح',
@@ -602,6 +984,11 @@ class AppLocalizations {
       'next': 'Next',
       'previous': 'Previous',
       'close': 'Close',
+      'optional': 'Optional',
+      'useCurrentLocation': 'Use Current Location',
+      'openInGoogleMaps': 'Open in Google Maps',
+      'openInWaze': 'Open in Waze',
+      'enterLocationManually': 'Enter Location Manually',
       'done': 'Done',
       'yes': 'Yes',
       'no': 'No',
@@ -616,6 +1003,7 @@ class AppLocalizations {
       'confirmPassword': 'Confirm Password',
       'forgotPassword': 'Forgot Password',
       'resetPassword': 'Reset Password',
+      'resetPasswordSubtitle': 'Enter your email address and we\'ll send you a link to reset your password',
       'changePassword': 'Change Password',
       'currentPassword': 'Current Password',
       'newPassword': 'New Password',
@@ -625,6 +1013,38 @@ class AppLocalizations {
       'enableTwoFactor': 'Enable Two-Factor Auth',
       'disableTwoFactor': 'Disable Two-Factor Auth',
       'verificationCode': 'Verification Code',
+      'loginToYourAccount': 'Login to Your Account',
+      'dontHaveAccount': 'Don\'t have an account? Register now',
+      'medicalAppointmentSystem': 'Medical Appointment System',
+      'systemTagline': 'Your Health, Our Priority',
+      'registerToSystem': 'Create Account',
+      'iWantToRegisterAs': 'I want to register as:',
+      'agreeToTerms': 'I agree to the terms of use and privacy policy',
+      'termsAndPrivacy': 'Terms of Use and Privacy Policy',
+      'agreeToTermsPatient': 'I agree to the terms of use and privacy policy for patients',
+      'agreeToTermsDoctor': 'I agree to the terms of use and privacy policy for doctors/therapists',
+      'alreadyHaveAccount': 'Already have an account?',
+      'loginHere': 'Login here',
+      'licenseNumber': 'License Number',
+      'specialty': 'Specialty',
+      'specialtyRequired': 'Please select at least one specialty',
+      'clinicAddress': 'Clinic Address',
+      'street': 'Street',
+      'city': 'City',
+      'country': 'Country',
+      'paymentInformation': 'Payment Information for Verification',
+      'visaCardNumber': 'Visa Card Number',
+      'cardHolderName': 'Card Holder Name',
+      'expiryDate': 'Expiry Date (MM/YY)',
+      'cvv': 'Security Code (CVV)',
+      'idNumber': 'ID Number',
+      'verificationNotice': 'This information is required to verify your identity as a licensed doctor',
+      'adminApprovalRequired': 'Admin Approval Required',
+      'doctorApprovalNotice': 'Registering as a doctor/therapist requires admin approval. After registration, your account will be reviewed and approved within 24-48 hours.',
+      'doctorOrTherapist': 'Doctor/Therapist',
+      'paymentInfoDescription': 'Payment information for account setup and receiving payments',
+      'selectLocation': 'Select Location',
+      'selectSpecialties': 'Select Specialties',
       
       // Medical Specialties
       'osteopath': 'Osteopath',
@@ -711,6 +1131,16 @@ class AppLocalizations {
       'whatsappNotification': 'WhatsApp Notification',
       'pushNotification': 'Push Notification',
       
+      // Dashboard Metrics
+      'upcomingAppointments': 'Upcoming Appointments',
+      'newMessages': 'New Messages',
+      'newPatientsThisMonth': 'New Patients This Month',
+      'messages': 'Messages',
+      'status': 'Status',
+      'viewAll': 'View All',
+      'noAppointmentsFound': 'No appointments found',
+      'noMessagesFound': 'No messages found',
+      
       // Calendar
       'calendar': 'Calendar',
       'today': 'Today',
@@ -734,6 +1164,8 @@ class AppLocalizations {
       'requiredField': 'Required field',
       'invalidEmail': 'Invalid email address',
       'invalidPhone': 'Invalid phone number',
+      'mobileOnly': 'Mobile Only',
+      'mobilePhoneHint': 'Please enter mobile number only (05X-XXXXXXX)',
       'passwordTooShort': 'Password too short',
       'passwordsDoNotMatch': 'Passwords do not match',
       'invalidDate': 'Invalid date',

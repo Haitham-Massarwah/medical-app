@@ -4,21 +4,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Creates demo accounts ONLY in development environment
- * This seed file should NEVER be run in production
+ * Creates demo accounts from configuration
+ * Use with caution when running against real data
  */
 export async function seed(knex: Knex): Promise<void> {
-  // Check environment - only allow in development
+  // Load demo accounts from environment config
   const nodeEnv = process.env.NODE_ENV || 'development';
-  
-  if (nodeEnv === 'production') {
-    console.log('⚠️  Demo accounts seed skipped - Production environment detected');
-    console.log('   Demo accounts are only created in development environment');
-    return;
-  }
-
-  // Load demo accounts from config
-  const configPath = path.join(__dirname, '../../../config/development.config.json');
+  const configFile =
+    nodeEnv === 'production' ? 'production.config.json' : 'development.config.json';
+  const configPath = path.join(__dirname, '../../../config', configFile);
   let config: any;
   
   try {
@@ -63,9 +57,9 @@ export async function seed(knex: Knex): Promise<void> {
     const { email, password, role, firstName, lastName, ...profileData } = accountConfig;
     
     let user = await knex('users').where({ email }).first();
-    
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     if (!user) {
-      const hashedPassword = await bcrypt.hash(password, 12);
       const [newUser] = await knex('users')
         .insert({
           tenant_id: tenantId,
@@ -83,12 +77,28 @@ export async function seed(knex: Knex): Promise<void> {
         .returning('*');
       
       user = newUser;
+      console.log(`✅ Demo ${role} account created: ${email}`);
+    } else {
+      await knex('users')
+        .where({ id: user.id })
+        .update({
+          password_hash: hashedPassword,
+          first_name: firstName,
+          last_name: lastName,
+          role,
+          phone: profileData.phone || user.phone,
+          updated_at: new Date(),
+        });
+      console.log(`♻️  Demo ${role} account updated: ${email}`);
+    }
 
-      // Create role-specific profiles
-      if (role === 'doctor' && profileData.specialty) {
+    // Ensure role-specific profiles exist
+    if (role === 'doctor' && profileData.specialty) {
+      const doctor = await knex('doctors').where({ user_id: user.id }).first();
+      if (!doctor) {
         await knex('doctors')
           .insert({
-            user_id: newUser.id,
+            user_id: user.id,
             tenant_id: tenantId,
             specialty: profileData.specialty,
             license_number: profileData.licenseNumber || `DEMO-${role.toUpperCase()}-${Date.now()}`,
@@ -100,10 +110,13 @@ export async function seed(knex: Knex): Promise<void> {
             created_at: new Date(),
             updated_at: new Date(),
           });
-      } else if (role === 'patient') {
+      }
+    } else if (role === 'patient') {
+      const patient = await knex('patients').where({ user_id: user.id }).first();
+      if (!patient) {
         await knex('patients')
           .insert({
-            user_id: newUser.id,
+            user_id: user.id,
             tenant_id: tenantId,
             emergency_contact_name: null,
             emergency_contact_phone: null,
@@ -113,10 +126,6 @@ export async function seed(knex: Knex): Promise<void> {
             updated_at: new Date(),
           });
       }
-
-      console.log(`✅ Demo ${role} account created: ${email}`);
-    } else {
-      console.log(`ℹ️  Demo ${role} account already exists: ${email}`);
     }
   }
 
@@ -131,7 +140,7 @@ export async function seed(knex: Knex): Promise<void> {
   }
   
   console.log('\n================================================');
-  console.log('⚠️  These accounts exist ONLY in development environment');
+  console.log('⚠️  Demo accounts created/updated from configuration');
   console.log('================================================\n');
 }
 

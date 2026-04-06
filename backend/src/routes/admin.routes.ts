@@ -108,11 +108,14 @@ router.get('/database/appointments', async (req, res) => {
     const appointments = await db('appointments')
       .select(
         'appointments.*',
-        db.raw("CONCAT(patient_users.first_name, ' ', patient_users.last_name) as patient_name"),
-        db.raw("CONCAT(doctor_users.first_name, ' ', doctor_users.last_name) as doctor_name")
+        db.raw("TRIM(CONCAT(COALESCE(patient_users.first_name, ''), ' ', COALESCE(patient_users.last_name, ''))) as patient_name"),
+        db.raw("TRIM(CONCAT(COALESCE(doctor_users.first_name, ''), ' ', COALESCE(doctor_users.last_name, ''))) as doctor_name"),
+        'doctors.specialty as specialty'
       )
-      .leftJoin('users as patient_users', 'appointments.patient_id', 'patient_users.id')
-      .leftJoin('users as doctor_users', 'appointments.doctor_id', 'doctor_users.id')
+      .leftJoin('patients', 'appointments.patient_id', 'patients.id')
+      .leftJoin('users as patient_users', 'patients.user_id', 'patient_users.id')
+      .leftJoin('doctors', 'appointments.doctor_id', 'doctors.id')
+      .leftJoin('users as doctor_users', 'doctors.user_id', 'doctor_users.id')
       .orderBy('appointments.appointment_date', 'desc')
       .limit(limit)
       .offset(offset);
@@ -249,6 +252,67 @@ router.delete('/database/users/:id', async (req, res) => {
     });
   }
 });
+
+/**
+ * GET /api/v1/admin/activity-logs
+ * Get system activity logs
+ */
+router.get('/activity-logs', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = (page - 1) * limit;
+
+    const logs = await db('activity_logs')
+      .select('*')
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .offset(offset);
+
+    const total = await db('activity_logs').count('id as count').first();
+
+    res.json({
+      success: true,
+      data: logs,
+      pagination: {
+        page,
+        limit,
+        total: Number(total?.count || 0),
+        totalPages: Math.ceil(Number(total?.count || 0) / limit),
+      },
+    });
+  } catch (error: any) {
+    // If activity_logs table doesn't exist, return empty array
+    res.json({
+      success: true,
+      data: [],
+      pagination: {
+        page: 1,
+        limit: 100,
+        total: 0,
+        totalPages: 0,
+      },
+    });
+  }
+});
+
+/**
+ * Permissions routes
+ */
+import { PermissionsController } from '../controllers/permissions.controller';
+const permissionsController = new PermissionsController();
+
+/**
+ * GET /api/v1/admin/permissions
+ * Get system permissions
+ */
+router.get('/permissions', permissionsController.getPermissions);
+
+/**
+ * PUT /api/v1/admin/permissions
+ * Update system permissions
+ */
+router.put('/permissions', permissionsController.updatePermissions);
 
 export default router;
 

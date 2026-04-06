@@ -44,6 +44,17 @@ router.post(
 );
 
 /**
+ * @route   GET /api/v1/auth/check-email
+ * @desc    Check if email exists
+ * @access  Public
+ */
+router.get(
+  '/check-email',
+  strictRateLimiter,
+  authController.checkEmailExists
+);
+
+/**
  * @route   POST /api/v1/auth/forgot-password
  * @desc    Request password reset
  * @access  Public
