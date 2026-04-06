@@ -97,6 +97,10 @@ jobs:
       - name: Code generation
         run: dart run build_runner build --delete-conflicting-outputs
 
+      # build/ must not be in git: CMakeCache embeds absolute paths and breaks other machines/CI.
+      - name: Clean Flutter build
+        run: flutter clean
+
       - name: Windows E2E harness (skipped unless RUN_FULL_E2E=true)
         run: >
           flutter test integration_test/full_automated_test.dart -d windows
