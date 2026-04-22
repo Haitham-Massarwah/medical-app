@@ -2,7 +2,8 @@ import db from '../config/database';
 import redis from '../config/redis';
 import { logger } from '../config/logger';
 import { ApiError } from '../utils/apiError';
-import { addMinutes, format, isAfter, isBefore } from 'date-fns';
+import { add, addMinutes, format, isAfter, isBefore } from 'date-fns';
+import { formatInTimeZone, zonedTimeToUtc } from 'date-fns-tz';
 import { fireGoogleCalendarSync } from './appointmentGoogleCalendarSync.service';
 import { noShowOverbookingService } from './noShowOverbooking.service';
 import { appointmentSmsAutomationService } from './appointmentSmsAutomation.service';
@@ -61,6 +62,33 @@ interface GetAvailableSlotsParams {
 
 export class AppointmentService {
   private readonly timezone = process.env.TIMEZONE || 'Asia/Jerusalem';
+
+  /** DB day_of_week: 0=Sun..6=Sat; from ISO weekday in this timezone (1=Mon..7=Sun). */
+  private dayOfWeekInTimezone(d: Date): number {
+    const i = parseInt(formatInTimeZone(d, this.timezone, 'i'), 10);
+    if (Number.isNaN(i)) return 0;
+    return i === 7 ? 0 : i;
+  }
+
+  private ymdInTimezone(d: Date): string {
+    return formatInTimeZone(d, this.timezone, 'yyyy-MM-dd');
+  }
+
+  private timeHmssInTimezone(d: Date): string {
+    return formatInTimeZone(d, this.timezone, 'HH:mm:ss');
+  }
+
+  private minutesFromMidnightInTimezone(d: Date): number {
+    const h = parseInt(formatInTimeZone(d, this.timezone, 'H'), 10);
+    const m = parseInt(formatInTimeZone(d, this.timezone, 'm'), 10);
+    return h * 60 + m;
+  }
+
+  private addOneCalendarYmd(ymd: string): string {
+    const t = zonedTimeToUtc(`${ymd}T12:00:00.000`, this.timezone);
+    const t2 = add(t, { days: 1 });
+    return formatInTimeZone(t2, this.timezone, 'yyyy-MM-dd');
+  }
 
   /**
    * Book a new appointment
@@ -222,9 +250,9 @@ export class AppointmentService {
       return false;
     }
 
-    // 2. Check doctor's regular availability
-    const dayOfWeek = appointmentDate.getDay();
-    const appointmentTime = format(appointmentDate, 'HH:mm:ss');
+    // 2. Check doctor's regular availability (wall-clock in clinic timezone, e.g. Asia/Jerusalem)
+    const dayOfWeek = this.dayOfWeekInTimezone(appointmentDate);
+    const appointmentTime = this.timeHmssInTimezone(appointmentDate);
 
     const regularAvailability = await db('availability')
       .where({
@@ -234,7 +262,7 @@ export class AppointmentService {
         is_active: true,
       })
       .andWhere('start_time', '<=', appointmentTime)
-      .andWhere('end_time', '>=', format(appointmentEnd, 'HH:mm:ss'))
+      .andWhere('end_time', '>=', this.timeHmssInTimezone(appointmentEnd))
       .first();
 
     if (!regularAvailability) {
@@ -242,7 +270,7 @@ export class AppointmentService {
     }
 
     // 3. Check for exceptions (holidays, blocked dates)
-    const dateOnly = format(appointmentDate, 'yyyy-MM-dd');
+    const dateOnly = this.ymdInTimezone(appointmentDate);
     const exception = await db('availability_exceptions')
       .where({
         doctor_id: doctorId,
@@ -336,7 +364,46 @@ export class AppointmentService {
     overbooking_detail?: BookAppointmentMeta['overbooking'];
   }> {
     const appointmentEnd = addMinutes(appointmentDate, durationMinutes);
-    const dateOnly = format(appointmentDate, 'yyyy-MM-dd');
+    const dateOnly = this.ymdInTimezone(appointmentDate);
+
+    const dayOfWeek = this.dayOfWeekInTimezone(appointmentDate);
+    const appointmentTime = this.timeHmssInTimezone(appointmentDate);
+    const regularAvailability = await trx('availability')
+      .where({
+        doctor_id: doctorId,
+        tenant_id: tenantId,
+        day_of_week: dayOfWeek,
+        is_active: true,
+      })
+      .andWhere('start_time', '<=', appointmentTime)
+      .andWhere('end_time', '>=', this.timeHmssInTimezone(appointmentEnd))
+      .first();
+    if (!regularAvailability) {
+      throw new ApiError(409, 'Time slot is not available');
+    }
+
+    const exception = await trx('availability_exceptions')
+      .where({
+        doctor_id: doctorId,
+        tenant_id: tenantId,
+        date: dateOnly,
+        type: 'blocked',
+      })
+      .first();
+    if (exception) {
+      if (
+        exception.start_time &&
+        exception.end_time &&
+        appointmentTime >= exception.start_time &&
+        appointmentTime <= exception.end_time
+      ) {
+        throw new ApiError(409, 'Time slot is not available');
+      }
+      if (!exception.start_time && !exception.end_time) {
+        throw new ApiError(409, 'Time slot is not available');
+      }
+    }
+
     const timeOffRows = await trx('doctor_time_off')
       .where({ doctor_id: doctorId, tenant_id: tenantId })
       .select('start_date', 'end_date');
@@ -433,9 +500,12 @@ export class AppointmentService {
       .whereBetween('appointment_date', [startDate, endDateOrDefault]);
 
     // Get exceptions
+    const startYmd = formatInTimeZone(startDate, this.timezone, 'yyyy-MM-dd');
+    const endYmd = formatInTimeZone(endDateOrDefault, this.timezone, 'yyyy-MM-dd');
+
     const exceptions = await db('availability_exceptions')
       .where({ doctor_id: doctorId, tenant_id: tenantId })
-      .whereBetween('date', [format(startDate, 'yyyy-MM-dd'), format(endDateOrDefault, 'yyyy-MM-dd')]);
+      .whereBetween('date', [startYmd, endYmd]);
 
     const [doctorBreaks, doctorTimeOff] = await Promise.all([
       db('doctor_breaks')
@@ -444,39 +514,37 @@ export class AppointmentService {
       db('doctor_time_off').where({ doctor_id: doctorId, tenant_id: tenantId }).select('start_date', 'end_date'),
     ]);
 
-    // Generate available slots
     const availableSlots: Date[] = [];
-    const currentDate = new Date(startDate);
-
-    while (isBefore(currentDate, endDateOrDefault)) {
-      const dayOfWeek = currentDate.getDay();
-      const ymd = format(currentDate, 'yyyy-MM-dd');
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+    let ymd = startYmd;
+    while (ymd <= endYmd) {
       if (this.isDateInDoctorTimeOff(ymd, doctorTimeOff)) {
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDate.setHours(0, 0, 0, 0);
+        ymd = this.addOneCalendarYmd(ymd);
         continue;
       }
+      const noon = zonedTimeToUtc(`${ymd}T12:00:00.000`, this.timezone);
+      const dayOfWeek = this.dayOfWeekInTimezone(noon);
       const dayAvailability = availability.filter((a) => a.day_of_week === dayOfWeek);
 
       for (const av of dayAvailability) {
-        // Parse start and end times
         const [startHour, startMinute] = av.start_time.split(':').map(Number);
         const [endHour, endMinute] = av.end_time.split(':').map(Number);
 
-        let slotTime = new Date(currentDate);
-        slotTime.setHours(startHour, startMinute, 0, 0);
+        let slotTime = zonedTimeToUtc(
+          `${ymd} ${pad2(startHour)}:${pad2(startMinute)}:00`,
+          this.timezone,
+        );
+        const endTime = zonedTimeToUtc(
+          `${ymd} ${pad2(endHour)}:${pad2(endMinute)}:00`,
+          this.timezone,
+        );
 
-        const endTime = new Date(currentDate);
-        endTime.setHours(endHour, endMinute, 0, 0);
-
-        // Generate slots within working hours
-        while (isBefore(addMinutes(slotTime, durationMinutes), endTime) || slotTime.getTime() === endTime.getTime()) {
-          // Check if slot is not in the past
+        while (
+          isBefore(addMinutes(slotTime, durationMinutes), endTime) ||
+          slotTime.getTime() === endTime.getTime()
+        ) {
           if (isAfter(slotTime, new Date())) {
-            // Check if not blocked by exception
             const isBlocked = this.isSlotBlocked(slotTime, durationMinutes, exceptions);
-            
-            // Check if not conflicting with existing appointment
             const hasConflict = this.hasAppointmentConflict(slotTime, durationMinutes, appointments);
             const slotEnd = addMinutes(slotTime, durationMinutes);
             const inBreak = this.breaksOverlapSlot(slotTime, slotEnd, doctorBreaks);
@@ -490,9 +558,7 @@ export class AppointmentService {
         }
       }
 
-      // Move to next day
-      currentDate.setDate(currentDate.getDate() + 1);
-      currentDate.setHours(0, 0, 0, 0);
+      ymd = this.addOneCalendarYmd(ymd);
     }
 
     return availableSlots;
@@ -727,8 +793,8 @@ export class AppointmentService {
 
     let query = db('appointments').where({ tenant_id: tenantId });
 
-    // Admin / Developer: tenant-wide appointment context
-    if (role === 'admin' || role === 'developer') {
+    // Admin / Developer / Doctor / Paramedical: include patient and doctor display fields (IDs alone are not useful in UI).
+    if (role === 'admin' || role === 'developer' || role === 'doctor' || role === 'paramedical') {
       query = query
         .leftJoin('doctors', 'appointments.doctor_id', 'doctors.id')
         .leftJoin('users as doctor_users', 'doctors.user_id', 'doctor_users.id')
@@ -741,6 +807,9 @@ export class AppointmentService {
           ),
           db.raw(
             "COALESCE(NULLIF(TRIM(CONCAT(COALESCE(patient_users.first_name, ''), ' ', COALESCE(patient_users.last_name, ''))), ''), appointments.guest_name, 'מטופל') as patientName"
+          ),
+          db.raw(
+            "NULLIF(TRIM(COALESCE(patient_users.phone, appointments.guest_phone, '')), '') as patientPhone"
           ),
           'doctors.specialty as specialty'
         );
@@ -844,6 +913,25 @@ export class AppointmentService {
     return appointment;
   }
 
+  /**
+   * Re-run post-booking WhatsApp/Telegram/email flow for an appointment (doctor/staff only).
+   */
+  public async resendBookingNotification(
+    appointmentId: string,
+    tenantId: string,
+    userId: string,
+    role: string,
+  ): Promise<void> {
+    if (!['doctor', 'paramedical', 'admin', 'developer'].includes(role)) {
+      throw new ApiError(403, 'Not allowed to resend patient notification');
+    }
+    const appointment = await this.getAppointmentById(appointmentId, tenantId, userId, role);
+    if (!appointment) {
+      throw new ApiError(404, 'Appointment not found');
+    }
+    await appointmentSmsAutomationService.onAppointmentBooked(appointmentId);
+  }
+
   private toYmd(value: unknown): string {
     if (value == null) return '';
     if (value instanceof Date) return format(value, 'yyyy-MM-dd');
@@ -874,9 +962,9 @@ export class AppointmentService {
 
   /** True if [slotStart, slotEnd) overlaps any doctor break on that weekday. */
   private breaksOverlapSlot(slotStart: Date, slotEnd: Date, breaks: any[]): boolean {
-    const dow = slotStart.getDay();
-    const sm = slotStart.getHours() * 60 + slotStart.getMinutes();
-    const em = slotEnd.getHours() * 60 + slotEnd.getMinutes();
+    const dow = this.dayOfWeekInTimezone(slotStart);
+    const sm = this.minutesFromMidnightInTimezone(slotStart);
+    const em = this.minutesFromMidnightInTimezone(slotEnd);
     for (const br of breaks) {
       if (Number(br.day_of_week) !== dow) continue;
       const bs = this.timePartsToMinutes(br.start_time);
@@ -891,9 +979,9 @@ export class AppointmentService {
    * Helper: Check if slot is blocked by exception
    */
   private isSlotBlocked(slotTime: Date, durationMinutes: number, exceptions: any[]): boolean {
-    const dateOnly = format(slotTime, 'yyyy-MM-dd');
-    const timeOnly = format(slotTime, 'HH:mm:ss');
-    const slotEnd = format(addMinutes(slotTime, durationMinutes), 'HH:mm:ss');
+    const dateOnly = this.ymdInTimezone(slotTime);
+    const timeOnly = this.timeHmssInTimezone(slotTime);
+    const slotEnd = this.timeHmssInTimezone(addMinutes(slotTime, durationMinutes));
 
     const exception = exceptions.find((e) => e.date === dateOnly && e.type === 'blocked');
 

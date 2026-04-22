@@ -165,6 +165,17 @@ router.post(
 );
 
 /**
+ * @route   POST /api/v1/appointments/:id/resend-notification
+ * @desc    Resend patient booking message (same pipeline as after booking)
+ * @access  Private (doctor, paramedical, admin, developer)
+ */
+router.post(
+  '/:id/resend-notification',
+  [param('id').isUUID().withMessage('Valid appointment ID is required'), validateRequest],
+  appointmentController.resendNotification.bind(appointmentController)
+);
+
+/**
  * @route   POST /api/v1/appointments/:id/no-show
  * @desc    Mark appointment as no-show
  * @access  Private (Doctor or Admin only)

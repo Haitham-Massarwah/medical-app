@@ -6,6 +6,7 @@ import '../../services/appointment_service.dart';
 import '../navigation/app_module_route_builder.dart';
 import '../widgets/unified_dashboard_layout.dart';
 import '../widgets/metric_card.dart';
+import '../../services/user_service.dart';
 
 /// PD-12: Doctor Dashboard using unified layout structure
 class DoctorDashboardPage extends StatefulWidget {
@@ -24,10 +25,23 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   List<Map<String, dynamic>> _appointments = [];
   List<Map<String, String>> _messages = [];
 
+  void _onUserVersionChanged() {
+    if (mounted) {
+      _loadDashboardData();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    UserService.currentUserVersion.addListener(_onUserVersionChanged);
     _loadDashboardData();
+  }
+
+  @override
+  void dispose() {
+    UserService.currentUserVersion.removeListener(_onUserVersionChanged);
+    super.dispose();
   }
 
   Future<void> _loadDashboardData() async {
@@ -163,24 +177,61 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
     );
   }
 
+  String _patientDisplayName(Map<String, dynamic> a) {
+    final fromApi = '${a['patientName'] ?? a['patient_name'] ?? ''}'.trim();
+    if (fromApi.isNotEmpty) return fromApi;
+    final full = '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'.trim();
+    if (full.isNotEmpty) return full;
+    final guest = '${a['guest_name'] ?? ''}'.trim();
+    if (guest.isNotEmpty) return guest;
+    return 'מטופל';
+  }
+
+  String _patientPhoneLabel(Map<String, dynamic> a) {
+    final p = '${a['patientPhone'] ?? a['patient_phone'] ?? a['guest_phone'] ?? ''}'.trim();
+    if (p.isNotEmpty) return p;
+    return '—';
+  }
+
+  String _statusLabelHe(String raw) {
+    switch (raw) {
+      case 'confirmed':
+        return 'מאושר';
+      case 'scheduled':
+        return 'נקבע';
+      case 'completed':
+        return 'הושלם';
+      case 'cancelled':
+        return 'בוטל';
+      case 'no_show':
+        return 'אי-הגעה';
+      case 'rescheduled':
+        return 'נדחה';
+      default:
+        return raw;
+    }
+  }
+
   Widget _buildAppointmentsTable(List<Map<String, dynamic>> appointments) {
     final rows = appointments.take(6).map((a) {
-      // Always try to get patient name, fallback to ID if name not available.
-      final patientName = a['patient_name']?.toString().trim();
-      final fullName = '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'.trim();
-      final patientId = a['patient_id']?.toString().trim();
-      final patient = (patientName != null && patientName.isNotEmpty)
-          ? patientName
-          : (fullName.isNotEmpty ? fullName : (patientId != null && patientId.isNotEmpty ? patientId : '-'));
+      final patient = _patientDisplayName(a);
+      final phone = _patientPhoneLabel(a);
       final dateStr = (a['appointment_date'] ?? '').toString();
       final date = DateTime.tryParse(dateStr);
-      final dateLabel = date == null ? '-' : '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      final timeLabel = date == null ? '-' : '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-      final status = (a['status'] ?? 'scheduled').toString();
-      final confirmed = status == 'confirmed' || status == 'completed';
+      final local = date?.toLocal();
+      final dateLabel = local == null
+          ? '-'
+          : '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+      final timeLabel = local == null
+          ? '-'
+          : '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+      final statusRaw = (a['status'] ?? 'scheduled').toString();
+      final status = _statusLabelHe(statusRaw);
+      final confirmed = statusRaw == 'confirmed' || statusRaw == 'completed';
 
       return _buildAppointmentRow(
         patient,
+        phone,
         dateLabel,
         timeLabel,
         status,
@@ -190,16 +241,18 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
 
     return Table(
       columnWidths: const {
-        0: FlexColumnWidth(2),
-        1: FlexColumnWidth(2),
-        2: FlexColumnWidth(1.5),
+        0: FlexColumnWidth(2.2),
+        1: FlexColumnWidth(1.6),
+        2: FlexColumnWidth(1.4),
         3: FlexColumnWidth(1.2),
+        4: FlexColumnWidth(1.2),
       },
       children: [
         TableRow(
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: const [
             Padding(padding: EdgeInsets.all(12), child: Text('מטופל', style: TextStyle(fontWeight: FontWeight.bold))),
+            Padding(padding: EdgeInsets.all(12), child: Text('טלפון', style: TextStyle(fontWeight: FontWeight.bold))),
             Padding(padding: EdgeInsets.all(12), child: Text('תאריך', style: TextStyle(fontWeight: FontWeight.bold))),
             Padding(padding: EdgeInsets.all(12), child: Text('שעה', style: TextStyle(fontWeight: FontWeight.bold))),
             Padding(padding: EdgeInsets.all(12), child: Text('סטטוס', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -210,10 +263,18 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
     );
   }
 
-  TableRow _buildAppointmentRow(String patient, String date, String time, String status, bool isConfirmed) {
+  TableRow _buildAppointmentRow(
+    String patient,
+    String phone,
+    String date,
+    String time,
+    String status,
+    bool isConfirmed,
+  ) {
     return TableRow(
       children: [
         Padding(padding: const EdgeInsets.all(12), child: Text(patient)),
+        Padding(padding: const EdgeInsets.all(12), child: Text(phone)),
         Padding(padding: const EdgeInsets.all(12), child: Text(date)),
         Padding(padding: const EdgeInsets.all(12), child: Text(time)),
         Padding(
@@ -268,27 +329,9 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
   }
 
   Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('יציאה'),
-        content: const Text('האם אתה בטוח שברצונך להתנתק?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ביטול')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('יציאה'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await _authService.logout();
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/login');
-      }
+    await _authService.logout();
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/login');
     }
   }
 

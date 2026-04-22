@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'reschedule_page.dart';
 import '../../services/waze_service.dart';
 import '../../services/api_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/appointment_service.dart';
+import 'package:medical_appointment_system/core/utils/error_handler.dart';
 
 class AppointmentsPage extends StatefulWidget {
   const AppointmentsPage({super.key});
@@ -13,11 +16,15 @@ class AppointmentsPage extends StatefulWidget {
 
 class _AppointmentsPageState extends State<AppointmentsPage> {
   final ApiService _apiService = ApiService();
+  final AuthService _authService = AuthService();
+  final AppointmentService _appointmentService = AppointmentService();
   final List<String> _filters = ['הכל', 'פעיל', 'מאושר', 'ממתין', 'הושלם', 'בוטל'];
   List<Appointment> _appointments = [];
   String _selectedFilter = 'פעיל'; // Changed default to show active appointments
   bool _isLoading = true;
   String? _errorMessage;
+  String _userRole = '';
+  String? _resendingNotificationId;
 
   @override
   void initState() {
@@ -25,10 +32,19 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     _loadAppointments();
   }
 
+  bool get _canResendPatientMessage {
+    const allowed = {'doctor', 'paramedical', 'admin', 'developer'};
+    return allowed.contains(_userRole);
+  }
+
   Future<void> _loadAppointments() async {
     setState(() => _isLoading = true);
 
     try {
+      final me = await _authService.getCurrentUser();
+      final user = me['data']?['user'] ?? me['user'] ?? {};
+      _userRole = (user['role'] ?? '').toString();
+
       final response = await _apiService.get('/appointments');
       if (response['success'] == true) {
         final dynamic payload = response['data'];
@@ -40,18 +56,32 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
         setState(() {
           _appointments = rows.map((row) {
             final map = row as Map<String, dynamic>;
+            var timeStr = (map['time'] ?? map['appointment_time'] ?? '').toString();
+            if (timeStr.isEmpty) {
+              final d = DateTime.tryParse((map['appointment_date'] ?? map['date'] ?? '').toString());
+              if (d != null) {
+                final l = d.toLocal();
+                timeStr =
+                    '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+              }
+            }
+            final pName = '${map['patientName'] ?? map['patient_name'] ?? ''}'.trim();
+            final pPhone = '${map['patientPhone'] ?? map['patient_phone'] ?? map['guest_phone'] ?? ''}'
+                .trim();
             return Appointment(
               id: (map['id'] ?? '').toString(),
               doctorId: (map['doctor_id'] ?? map['doctorId'] ?? '').toString(),
               doctorName: (map['doctor_name'] ?? map['doctorName'] ?? 'לא ידוע').toString(),
               specialty: (map['doctor_specialty'] ?? map['specialty'] ?? '').toString(),
               date: (map['appointment_date'] ?? map['date'] ?? '').toString(),
-              time: (map['time'] ?? map['appointment_time'] ?? '').toString(),
+              time: timeStr,
               status: (map['status'] ?? '').toString(),
               location: (map['location'] ?? '').toString(),
               address: (map['address'] ?? '').toString(),
               latitude: map['latitude'] != null ? double.tryParse(map['latitude'].toString()) : null,
               longitude: map['longitude'] != null ? double.tryParse(map['longitude'].toString()) : null,
+              patientName: pName.isNotEmpty ? pName : null,
+              patientPhone: pPhone.isNotEmpty ? pPhone : null,
             );
           }).toList();
           _errorMessage = null;
@@ -66,6 +96,33 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
         _errorMessage = 'לא ניתן לטעון תורים אמיתיים כעת: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _resendPatientNotification(Appointment appointment) async {
+    if (appointment.id.isEmpty) return;
+    setState(() => _resendingNotificationId = appointment.id);
+    try {
+      await _appointmentService.resendPatientNotification(appointment.id);
+      if (!mounted) return;
+      ErrorHandler.showSnackBarAsDialog(
+        context,
+        const SnackBar(
+          content: Text('ההודעה למטופל נשלחה מחדש'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ErrorHandler.showSnackBarAsDialog(
+        context,
+        SnackBar(
+          content: Text('שליחה חוזרת נכשלה: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _resendingNotificationId = null);
     }
   }
 
@@ -177,6 +234,10 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                           onCancel: () => _cancelAppointment(appointment),
                                           onReschedule: () => _rescheduleAppointment(appointment),
                                           onNavigateToWaze: () => _navigateToWaze(appointment),
+                                          onResend: _canResendPatientMessage
+                                              ? () => _resendPatientNotification(appointment)
+                                              : null,
+                                          resendInProgress: _resendingNotificationId == appointment.id,
                                         );
                                       }).toList(),
                                     ),
@@ -224,6 +285,10 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                           onCancel: null, // History appointments can't be cancelled
                                           onReschedule: null, // History appointments can't be rescheduled
                                           onNavigateToWaze: () => _navigateToWaze(appointment),
+                                          onResend: _canResendPatientMessage
+                                              ? () => _resendPatientNotification(appointment)
+                                              : null,
+                                          resendInProgress: _resendingNotificationId == appointment.id,
                                         );
                                       }).toList(),
                                     ),
@@ -256,6 +321,10 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                       onCancel: () => _cancelAppointment(appointment),
                                       onReschedule: () => _rescheduleAppointment(appointment),
                                       onNavigateToWaze: () => _navigateToWaze(appointment),
+                                      onResend: _canResendPatientMessage
+                                          ? () => _resendPatientNotification(appointment)
+                                          : null,
+                                      resendInProgress: _resendingNotificationId == appointment.id,
                                     );
                                   }).toList(),
                                 ),
@@ -310,7 +379,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
+              ErrorHandler.showSnackBarAsDialog(context, 
                 const SnackBar(
                   content: Text('התור נוסף בהצלחה'),
                   backgroundColor: Colors.green,
@@ -341,7 +410,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
               setState(() {
                 appointment.status = 'cancelled';
               });
-              ScaffoldMessenger.of(context).showSnackBar(
+              ErrorHandler.showSnackBarAsDialog(context, 
                 const SnackBar(
                   content: Text('התור בוטל בהצלחה'),
                   backgroundColor: Colors.orange,
@@ -392,7 +461,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     
     if (mounted) {
       if (opened) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ErrorHandler.showSnackBarAsDialog(context, 
           const SnackBar(
             content: Text('פותח Waze...'),
             backgroundColor: Colors.green,
@@ -400,7 +469,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ErrorHandler.showSnackBarAsDialog(context, 
           const SnackBar(
             content: Text('לא ניתן לפתוח את Waze. אנא התקין את האפליקציה'),
             backgroundColor: Colors.red,
@@ -424,6 +493,9 @@ class Appointment {
   final String? address; // Full address for Waze navigation
   final double? latitude; // Optional: GPS coordinates
   final double? longitude; // Optional: GPS coordinates
+  /// When the current user is a doctor, API returns patient contact for this visit.
+  final String? patientName;
+  final String? patientPhone;
 
   Appointment({
     required this.id,
@@ -437,6 +509,8 @@ class Appointment {
     this.address,
     this.latitude,
     this.longitude,
+    this.patientName,
+    this.patientPhone,
   });
 }
 
@@ -445,6 +519,8 @@ class AppointmentCard extends StatelessWidget {
   final VoidCallback? onCancel;
   final VoidCallback? onReschedule;
   final VoidCallback? onNavigateToWaze;
+  final VoidCallback? onResend;
+  final bool resendInProgress;
 
   const AppointmentCard({
     super.key,
@@ -452,6 +528,8 @@ class AppointmentCard extends StatelessWidget {
     this.onCancel,
     this.onReschedule,
     this.onNavigateToWaze,
+    this.onResend,
+    this.resendInProgress = false,
   });
 
   @override
@@ -465,6 +543,7 @@ class AppointmentCard extends StatelessWidget {
         statusText = 'מאושר';
         break;
       case 'pending':
+      case 'scheduled':
         statusColor = Colors.orange;
         statusText = 'ממתין';
         break;
@@ -496,19 +575,45 @@ class AppointmentCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        appointment.doctorName,
+                        (appointment.patientName != null && appointment.patientName!.isNotEmpty)
+                            ? appointment.patientName!
+                            : appointment.doctorName,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
-                        appointment.specialty,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
+                      if (appointment.patientName != null && appointment.patientName!.isNotEmpty) ...[
+                        Text(
+                          'רופא: ${appointment.doctorName}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
-                      ),
+                        Text(
+                          appointment.specialty,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        if (appointment.patientPhone != null && appointment.patientPhone!.isNotEmpty)
+                          Text(
+                            'טלפון: ${appointment.patientPhone}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                      ] else
+                        Text(
+                          appointment.specialty,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                       Row(
                         children: [
                           const Icon(Icons.location_on, size: 16, color: Colors.grey),
@@ -567,7 +672,26 @@ class AppointmentCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            if ((appointment.status == 'confirmed' || appointment.status == 'pending') && 
+            if (onResend != null) ...[
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: OutlinedButton.icon(
+                  onPressed: resendInProgress ? null : onResend,
+                  icon: resendInProgress
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send_outlined, size: 18),
+                  label: Text(resendInProgress ? 'שולח...' : 'שלח הודעה שוב למטופל'),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if ((appointment.status == 'confirmed' ||
+                    appointment.status == 'pending' ||
+                    appointment.status == 'scheduled') &&
                 (onCancel != null || onReschedule != null))
               Row(
                 children: [

@@ -430,6 +430,29 @@ export class AppointmentController {
   }
 
   /**
+   * Resend booking confirmation / reminder message (WhatsApp/Telegram/email per automation)
+   * @route POST /api/v1/appointments/:id/resend-notification
+   */
+  public async resendNotification(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const tenantId = this.resolveTenantId(req);
+      const userId = req.user?.userId || req.user?.id || '';
+      const role = req.user?.role || '';
+
+      await this.appointmentService.resendBookingNotification(id, tenantId, userId, role);
+
+      res.status(200).json({
+        success: true,
+        message: 'Notification resend triggered',
+      });
+    } catch (error) {
+      logger.error('Error resending appointment notification:', error);
+      next(error);
+    }
+  }
+
+  /**
    * Mark appointment as no-show
    * @route POST /api/v1/appointments/:id/no-show
    */

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import '../../models/treatment_models_simple.dart';
+import 'package:medical_appointment_system/core/utils/error_handler.dart';
+
 import '../../services/appointment_service.dart';
+import '../../services/doctor_service.dart';
 
 class DoctorCalendarPage extends StatefulWidget {
   const DoctorCalendarPage({super.key});
@@ -13,1039 +13,922 @@ class DoctorCalendarPage extends StatefulWidget {
 }
 
 class _DoctorCalendarPageState extends State<DoctorCalendarPage> {
-  late final ValueNotifier<List<Appointment>> _selectedAppointments;
+  final AppointmentService _appointmentService = AppointmentService();
+  final DoctorService _doctorService = DoctorService();
+  final List<String> _dayNames = const [
+    'ראשון',
+    'שני',
+    'שלישי',
+    'רביעי',
+    'חמישי',
+    'שישי',
+    'שבת',
+  ];
+
   DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
+  DateTime _selectedDay = DateTime.now();
   CalendarFormat _calendarFormat = CalendarFormat.month;
-  
-  // Treatment types and break periods from settings
-  List<TreatmentTypeModel> _selectedTreatmentTypes = [];
-  List<BreakPeriodModel> _selectedBreakPeriods = [];
+  bool _loading = true;
+  bool _saving = false;
+  String _doctorId = '';
+
+  final Map<int, Map<String, String>> _workingHours = {};
+  List<Map<String, Object>> _breaks = [];
+  List<Map<String, Object>> _timeOff = [];
+  final Map<DateTime, List<Map<String, dynamic>>> _appointmentsByDate = {};
+  String? _resendingNotificationAppointmentId;
 
   @override
   void initState() {
     super.initState();
-    _selectedDay = _focusedDay;
-    _selectedAppointments = ValueNotifier(_getAppointmentsForDay(_selectedDay!));
-    _loadSettingsData();
-    _loadAppointmentsFromAPI();
+    for (int i = 0; i < 7; i++) {
+      _workingHours[i] = {'start': '', 'end': ''};
+    }
+    _loadData();
   }
 
-  Future<void> _loadAppointmentsFromAPI() async {
-    setState(() => _isLoadingAppointments = true);
+  Future<void> _loadData() async {
+    setState(() => _loading = true);
     try {
-      final appointments = await _appointmentService.getAppointments();
-      final appointmentsByDate = <DateTime, List<Appointment>>{};
-      
-      for (final apt in appointments) {
-        final aptDate = DateTime.tryParse(apt['appointment_date']?.toString() ?? '');
-        if (aptDate == null) continue;
-        
-        final dateOnly = DateTime(aptDate.year, aptDate.month, aptDate.day);
-        final patientName = apt['patientName'] ?? 
-                           (apt['first_name'] != null && apt['last_name'] != null 
-                             ? '${apt['first_name']} ${apt['last_name']}'.trim() 
-                             : apt['patient_id']?.toString() ?? 'Unknown');
-        
-        final appointment = Appointment(
-          id: apt['id']?.toString() ?? '',
-          patientName: patientName,
-          time: '${aptDate.hour.toString().padLeft(2, '0')}:${aptDate.minute.toString().padLeft(2, '0')}',
-          duration: apt['duration_minutes'] ?? 30,
-          type: apt['service_name'] ?? apt['treatment_type'] ?? 'טיפול',
-          status: apt['status']?.toString() ?? 'scheduled',
-          paymentStatus: apt['payment_status']?.toString() ?? 'pending',
-          amount: (apt['amount'] ?? apt['price'] ?? 0).toDouble(),
-          patientId: apt['patient_id']?.toString() ?? '',
-          treatmentTypeId: apt['service_id']?.toString() ?? apt['treatment_type_id']?.toString() ?? '',
-        );
-        
-        appointmentsByDate.putIfAbsent(dateOnly, () => []).add(appointment);
+      final doctor = await _doctorService.getMyDoctorProfile();
+      _doctorId = (doctor['id'] ?? '').toString();
+      if (_doctorId.isEmpty) {
+        throw Exception('לא נמצא מזהה רופא');
       }
-      
-      setState(() {
-        _appointments.clear();
-        _appointments.addAll(appointmentsByDate);
-        _isLoadingAppointments = false;
-      });
-      
-      // Refresh selected day appointments
-      _selectedAppointments.value = _getAppointmentsForDay(_selectedDay!);
+      await Future.wait([_loadSchedule(), _loadAppointments()]);
     } catch (e) {
-      setState(() => _isLoadingAppointments = false);
-      print('Error loading appointments: $e');
+      if (!mounted) return;
+      ErrorHandler.showSnackBarAsDialog(context, 
+        SnackBar(content: Text('שגיאה בטעינת נתוני יומן: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
-  
-  // Load treatment types and break periods from settings
-  Future<void> _loadSettingsData() async {
+
+  Future<void> _loadSchedule() async {
+    final data = await _doctorService.getScheduleSettings(_doctorId);
+    final hours = (data['working_hours'] as List?)?.cast<Map>() ?? <Map>[];
+    final breaks = (data['breaks'] as List?)?.cast<Map>() ?? <Map>[];
+    final timeOff = (data['time_off'] as List?)?.cast<Map>() ?? <Map>[];
+
+    for (int i = 0; i < 7; i++) {
+      _workingHours[i] = {'start': '', 'end': ''};
+    }
+    for (final row in hours) {
+      final day = int.tryParse('${row['day_of_week']}') ?? -1;
+      if (day < 0 || day > 6) continue;
+      _workingHours[day] = {
+        'start': (row['start_time'] ?? '').toString().substring(0, 5),
+        'end': (row['end_time'] ?? '').toString().substring(0, 5),
+      };
+    }
+
+    _breaks = breaks
+        .map(
+          (e) => <String, Object>{
+            'day_of_week': int.tryParse('${e['day_of_week']}') ?? 0,
+            'start_time': (e['start_time'] ?? '').toString().substring(0, 5),
+            'end_time': (e['end_time'] ?? '').toString().substring(0, 5),
+          },
+        )
+        .toList();
+    _breaks = _dedupeBreaks(_breaks);
+
+    _timeOff = timeOff
+        .map(
+          (e) => <String, Object>{
+            'start_date': _normalizeIncomingDate((e['start_date'] ?? '').toString()),
+            'end_date': _normalizeIncomingDate((e['end_date'] ?? '').toString()),
+            'reason': (e['reason'] ?? '').toString(),
+            'is_holiday': e['is_holiday'] == true,
+          },
+        )
+        .toList();
+    _timeOff = _mergeTimeOffAfterLoad(_timeOff);
+  }
+
+  Future<void> _loadAppointments() async {
+    final appointments = await _appointmentService.getAppointments();
+    _appointmentsByDate.clear();
+    for (final item in appointments) {
+      final date = DateTime.tryParse((item['appointment_date'] ?? '').toString());
+      if (date == null) continue;
+      final key = DateTime(date.year, date.month, date.day);
+      _appointmentsByDate.putIfAbsent(key, () => []).add(Map<String, dynamic>.from(item));
+    }
+  }
+
+  List<Map<String, dynamic>> _appointmentsForDay(DateTime day) {
+    final key = DateTime(day.year, day.month, day.day);
+    return _appointmentsByDate[key] ?? <Map<String, dynamic>>[];
+  }
+
+  String _calendarPatientName(Map<String, dynamic> apt) {
+    final n = '${apt['patientName'] ?? apt['patient_name'] ?? apt['guest_name'] ?? ''}'.trim();
+    if (n.isNotEmpty) return n;
+    return 'מטופל';
+  }
+
+  String? _calendarPatientPhone(Map<String, dynamic> apt) {
+    final p = '${apt['patientPhone'] ?? apt['patient_phone'] ?? apt['guest_phone'] ?? ''}'.trim();
+    return p.isEmpty ? null : p;
+  }
+
+  Future<void> _resendPatientNotification(Map<String, dynamic> apt) async {
+    final id = (apt['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    setState(() => _resendingNotificationAppointmentId = id);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Load treatment types
-      final treatmentTypesString = prefs.getString('selected_treatment_types');
-      if (treatmentTypesString != null) {
-        final treatmentTypesData = jsonDecode(treatmentTypesString) as List;
-        setState(() {
-          _selectedTreatmentTypes = treatmentTypesData.map((data) => TreatmentTypeModel(
-            id: data['id'],
-            name: data['name'],
-            description: data['description'],
-            duration: Duration(minutes: data['duration']),
-            price: data['price'].toDouble(),
-            isActive: data['isActive'],
-          )).toList();
-        });
-      }
-      
-      // Load break periods
-      final breakPeriodsString = prefs.getString('selected_break_periods');
-      if (breakPeriodsString != null) {
-        final breakPeriodsData = jsonDecode(breakPeriodsString) as List;
-        setState(() {
-          _selectedBreakPeriods = breakPeriodsData.map((data) => BreakPeriodModel(
-            id: data['id'],
-            name: data['name'],
-            startTime: DateTime.parse(data['startTime']),
-            endTime: DateTime.parse(data['endTime']),
-            daysOfWeek: List<int>.from(data['daysOfWeek']),
-            isRecurring: data['isRecurring'],
-          )).toList();
-        });
-      }
-      
-      // If no saved data, use defaults
-      if (_selectedTreatmentTypes.isEmpty) {
-        setState(() {
-          _selectedTreatmentTypes = [
-            TreatmentTypeModel(
-              id: '1',
-              name: '×™×™×¢×•×¥ ×›×œ×œ×™',
-              description: '×™×™×¢×•×¥ ×¨×¤×•××™ ×›×œ×œ×™',
-              duration: Duration(minutes: 30),
-              price: 200.0,
-              isActive: true,
-            ),
-            TreatmentTypeModel(
-              id: '2',
-              name: '×‘×“×™×§×” ×’×•×¤× ×™×ª',
-              description: '×‘×“×™×§×” ×’×•×¤× ×™×ª ×ž×§×™×¤×”',
-              duration: Duration(minutes: 45),
-              price: 300.0,
-              isActive: true,
-            ),
-          ];
-          
-          _selectedBreakPeriods = [
-            BreakPeriodModel(
-              id: '1',
-              name: '×”×¤×¡×§×ª ×¦×”×¨×™×™×',
-              startTime: DateTime(2024, 1, 1, 12, 0),
-              endTime: DateTime(2024, 1, 1, 13, 0),
-              daysOfWeek: [1, 2, 3, 4, 5],
-              isRecurring: true,
-            ),
-          ];
-        });
-      }
+      await _appointmentService.resendPatientNotification(id);
+      if (!mounted) return;
+      ErrorHandler.showSnackBarAsDialog(
+        context,
+        const SnackBar(
+          content: Text('ההודעה למטופל נשלחה מחדש'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
-      print('Error loading settings data: $e');
+      if (!mounted) return;
+      ErrorHandler.showSnackBarAsDialog(
+        context,
+        SnackBar(
+          content: Text('שליחה חוזרת נכשלה: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _resendingNotificationAppointmentId = null);
     }
   }
 
-  @override
-  void dispose() {
-    _selectedAppointments.dispose();
-    super.dispose();
-  }
-
-  List<Appointment> _getAppointmentsForDay(DateTime day) {
-    // Mock data - in real app, this would come from database
-    return _appointments[day] ?? [];
-  }
-
-  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
-    if (!isSameDay(_selectedDay, selectedDay)) {
-      setState(() {
-        _selectedDay = selectedDay;
-        _focusedDay = focusedDay;
-      });
-      _selectedAppointments.value = _getAppointmentsForDay(selectedDay);
+  bool _isBlockedDay(DateTime day) {
+    final d = DateTime(day.year, day.month, day.day);
+    for (final off in _timeOff) {
+      final s = _parseYmdLocal((off['start_date'] ?? '').toString());
+      final e = _parseYmdLocal((off['end_date'] ?? '').toString());
+      if (!d.isBefore(s) && !d.isAfter(e)) return true;
     }
+    return false;
   }
 
-  // Check if a day is enabled (not previous day or vacation day)
-  bool _isDayEnabled(DateTime day) {
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    final dayOnly = DateTime(day.year, day.month, day.day);
-    
-    // Disable previous days
-    if (dayOnly.isBefore(todayOnly)) {
+  /// Calendar cell color: `true` = holiday, `false` = vacation, `null` = none.
+  bool? _timeOffKindForDay(DateTime day) {
+    final d = DateTime(day.year, day.month, day.day);
+    var hasHoliday = false;
+    var hasVacation = false;
+    for (final off in _timeOff) {
+      final s = _parseYmdLocal((off['start_date'] ?? '').toString());
+      final e = _parseYmdLocal((off['end_date'] ?? '').toString());
+      if (d.isBefore(s) || d.isAfter(e)) continue;
+      if (off['is_holiday'] == true) {
+        hasHoliday = true;
+      } else {
+        hasVacation = true;
+      }
+    }
+    if (hasHoliday) return true;
+    if (hasVacation) return false;
+    return null;
+  }
+
+  Future<void> _pickTime(int day, String key) async {
+    final initial = (_workingHours[day]?[key] ?? '').split(':');
+    final initialTime = initial.length == 2
+        ? TimeOfDay(hour: int.tryParse(initial[0]) ?? 9, minute: int.tryParse(initial[1]) ?? 0)
+        : const TimeOfDay(hour: 9, minute: 0);
+    final picked = await showTimePicker(context: context, initialTime: initialTime);
+    if (picked == null) return;
+    setState(() {
+      _workingHours[day]![key] = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    });
+  }
+
+  Future<bool> _saveSchedule() async {
+    setState(() => _saving = true);
+    try {
+      final workingHours = <Map<String, dynamic>>[];
+      for (int i = 0; i < 7; i++) {
+        final start = _workingHours[i]?['start'] ?? '';
+        final end = _workingHours[i]?['end'] ?? '';
+        if (start.isNotEmpty && end.isNotEmpty) {
+          workingHours.add({'day_of_week': i, 'start_time': start, 'end_time': end});
+        }
+      }
+      final sanitizedBreaks = _dedupeBreaks(_breaks);
+      final sanitizedTimeOff = _mergeTimeOffAfterLoad(_timeOff);
+      await _doctorService.saveScheduleSettings(
+        _doctorId,
+        workingHours: workingHours,
+        breaks: sanitizedBreaks.map((e) => Map<String, dynamic>.from(e)).toList(),
+        timeOff: sanitizedTimeOff.map((e) => Map<String, dynamic>.from(e)).toList(),
+      );
+      if (!mounted) return false;
+      ErrorHandler.showSnackBarAsDialog(context, 
+        const SnackBar(content: Text('הגדרות היומן נשמרו בהצלחה'), backgroundColor: Colors.green),
+      );
+      await _loadData();
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      ErrorHandler.showSnackBarAsDialog(context, 
+        SnackBar(content: Text('שגיאה בשמירת הגדרות: $e'), backgroundColor: Colors.red),
+      );
       return false;
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    
-    // Disable vacation days
-    if (_vacationDays.contains(dayOnly)) {
-      return false;
-    }
-    
-    return true;
   }
-  
-  // Refresh settings data from treatment settings page
-  void _refreshSettings() {
-    _loadSettingsData();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('×”×’×“×¨×•×ª ×¢×•×“×›× ×•: ${_selectedTreatmentTypes.length} ×˜×™×¤×•×œ×™×, ${_selectedBreakPeriods.length} ×”×¤×¡×§×•×ª'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
+
+  Future<void> _addBreakDialog() async {
+    int day = _selectedDay.weekday % 7;
+    String start = '12:00';
+    String end = '13:00';
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateDialog) => AlertDialog(
+          title: const Text('הוספת הפסקה'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                value: day,
+                items: List.generate(7, (i) => DropdownMenuItem(value: i, child: Text(_dayNames[i]))),
+                onChanged: (v) => setStateDialog(() => day = v ?? 0),
+                decoration: const InputDecoration(labelText: 'יום'),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text('שעת התחלה: $start'),
+                trailing: const Icon(Icons.access_time),
+                onTap: () async {
+                  final parts = start.split(':');
+                  final picked = await showTimePicker(
+                    context: ctx,
+                    initialTime: TimeOfDay(
+                      hour: int.tryParse(parts[0]) ?? 12,
+                      minute: int.tryParse(parts[1]) ?? 0,
+                    ),
+                  );
+                  if (picked == null) return;
+                  setStateDialog(() {
+                    start =
+                        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text('שעת סיום: $end'),
+                trailing: const Icon(Icons.access_time),
+                onTap: () async {
+                  final parts = end.split(':');
+                  final picked = await showTimePicker(
+                    context: ctx,
+                    initialTime: TimeOfDay(
+                      hour: int.tryParse(parts[0]) ?? 13,
+                      minute: int.tryParse(parts[1]) ?? 0,
+                    ),
+                  );
+                  if (picked == null) return;
+                  setStateDialog(() {
+                    end =
+                        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ביטול')),
+            ElevatedButton(
+              onPressed: () async {
+                final startMin = _timeToMinutes(start);
+                final endMin = _timeToMinutes(end);
+                if (startMin == null || endMin == null || endMin <= startMin) {
+                  ErrorHandler.showSnackBarAsDialog(context, 
+                    const SnackBar(
+                      content: Text('יש להזין טווח הפסקה תקין (שעת סיום אחרי התחלה)'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                if (_hasBreakDuplicate(day, start, end)) {
+                  ErrorHandler.showSnackBarAsDialog(context, 
+                    const SnackBar(
+                      content: Text('הפסקה זהה כבר קיימת'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                setState(() {
+                  _breaks.add(<String, Object>{'day_of_week': day, 'start_time': start, 'end_time': end});
+                });
+                final saved = await _saveSchedule();
+                if (mounted && saved) {
+                  Navigator.pop(ctx);
+                }
+              },
+              child: const Text('הוסף'),
+            ),
+          ],
+        ),
       ),
     );
   }
-  
-  // Vacation days will be provided by API; start empty to avoid placeholders
-  final Set<DateTime> _vacationDays = {};
 
-  // Live appointments will be loaded from API; start empty to avoid placeholders
-  final Map<DateTime, List<Appointment>> _appointments = {};
-  final AppointmentService _appointmentService = AppointmentService();
-  bool _isLoadingAppointments = false;
-
-  // Mock appointment data (unused) with more examples including payment status
-  final Map<DateTime, List<Appointment>> _mockAppointmentsData = {
-    DateTime(2024, 1, 15): [
-      Appointment(
-        id: '1',
-        patientName: '×™×•×¡×™ ×›×”×Ÿ',
-        time: '09:00',
-        duration: 30,
-        type: '×‘×“×™×§×” ×›×œ×œ×™×ª',
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        amount: 200.0,
-        patientId: 'patient_1',
-        treatmentTypeId: 'treatment_1',
+  Future<void> _addTimeOffDialog() async {
+    DateTime start = DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day);
+    DateTime end = start.add(const Duration(days: 1));
+    bool holiday = false;
+    bool endDateManuallyChanged = false;
+    final reasonController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateDialog) => AlertDialog(
+          title: const Text('הוספת חופשה/חג'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text('מתאריך: ${_formatLocalYmd(start)}'),
+                trailing: const Icon(Icons.date_range),
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: start,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2035),
+                  );
+                  if (d != null) {
+                    setStateDialog(() {
+                      start = d;
+                      if (!endDateManuallyChanged) {
+                        end = d.add(const Duration(days: 1));
+                      } else if (end.isBefore(d)) {
+                        end = d;
+                      }
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                title: Text('עד תאריך: ${_formatLocalYmd(end)}'),
+                trailing: const Icon(Icons.date_range),
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: end,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2035),
+                  );
+                  if (d != null) {
+                    setStateDialog(() {
+                      end = d;
+                      endDateManuallyChanged = true;
+                    });
+                  }
+                },
+              ),
+              SwitchListTile(
+                value: holiday,
+                onChanged: (v) => setStateDialog(() => holiday = v),
+                title: const Text('האם מדובר בחג'),
+              ),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(labelText: 'הערה/סיבה'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ביטול')),
+            ElevatedButton(
+              onPressed: () async {
+                if (end.isBefore(start)) {
+                  ErrorHandler.showSnackBarAsDialog(context, 
+                    const SnackBar(
+                      content: Text('תאריך סיום חייב להיות אחרי תאריך התחלה'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                final startDate = _formatLocalYmd(start);
+                final endDate = _formatLocalYmd(end);
+                final reason = reasonController.text.trim();
+                if (_hasExactSameRangeOppositeType(startDate, endDate, holiday)) {
+                  Navigator.pop(ctx);
+                  if (!mounted) return;
+                  final choice = await showDialog<bool>(
+                    context: context,
+                    builder: (c2) => AlertDialog(
+                      title: const Text('תקופה כבר קיימת'),
+                      content: Text(
+                        'בתאריכים $startDate עד $endDate כבר קיימת הגדרה מסוג '
+                        '${holiday ? 'חופשה' : 'חג'}. בחר את הסוג הרצוי:',
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c2), child: const Text('ביטול')),
+                        TextButton(onPressed: () => Navigator.pop(c2, false), child: const Text('חופשה')),
+                        TextButton(onPressed: () => Navigator.pop(c2, true), child: const Text('חג')),
+                      ],
+                    ),
+                  );
+                  if (!mounted || choice == null) return;
+                  setState(() {
+                    _timeOff.removeWhere(
+                      (e) =>
+                          _normalizeIncomingDate((e['start_date'] ?? '').toString()) == startDate &&
+                          _normalizeIncomingDate((e['end_date'] ?? '').toString()) == endDate,
+                    );
+                    _timeOff.add(<String, Object>{
+                      'start_date': startDate,
+                      'end_date': endDate,
+                      'reason': reason,
+                      'is_holiday': choice,
+                    });
+                    _timeOff = _mergeTimeOffAfterLoad(_timeOff);
+                  });
+                  await _saveSchedule();
+                  return;
+                }
+                setState(() {
+                  _timeOff = _integrateTimeOffRange(_timeOff, startDate, endDate, holiday, reason);
+                });
+                final saved = await _saveSchedule();
+                if (mounted && saved) {
+                  Navigator.pop(ctx);
+                }
+              },
+              child: const Text('הוסף'),
+            ),
+          ],
+        ),
       ),
-      Appointment(
-        id: '2',
-        patientName: '×©×¨×” ×œ×•×™',
-        time: '10:30',
-        duration: 45,
-        type: '×™×™×¢×•×¥',
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        amount: 300.0,
-        patientId: 'patient_2',
-        treatmentTypeId: 'treatment_2',
-      ),
-      Appointment(
-        id: '3',
-        patientName: '×“×•×“ ×™×©×¨××œ×™',
-        time: '14:00',
-        duration: 30,
-        type: '×ž×¢×§×‘',
-        status: 'pending',
-        paymentStatus: 'pending',
-        amount: 200.0,
-        patientId: 'patient_3',
-        treatmentTypeId: 'treatment_1',
-      ),
-      Appointment(
-        id: '4',
-        patientName: '×ž×™×›×œ ××‘×¨×”×',
-        time: '15:30',
-        duration: 45,
-        type: '×‘×“×™×§×” ×’×•×¤× ×™×ª',
-        status: 'in_progress',
-        paymentStatus: 'paid',
-        amount: 300.0,
-        patientId: 'patient_4',
-        treatmentTypeId: 'treatment_2',
-      ),
-    ],
-    DateTime(2024, 1, 16): [
-      Appointment(
-        id: '5',
-        patientName: '××‘×™ ×›×”×Ÿ',
-        time: '08:30',
-        duration: 30,
-        type: '×™×™×¢×•×¥ ×›×œ×œ×™',
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        amount: 200.0,
-        patientId: 'patient_5',
-        treatmentTypeId: 'treatment_1',
-      ),
-      Appointment(
-        id: '6',
-        patientName: '×¨×—×œ ×’×•×œ×“',
-        time: '11:00',
-        duration: 45,
-        type: '×‘×“×™×§×” ×’×•×¤× ×™×ª',
-        status: 'in_progress',
-        paymentStatus: 'pending',
-        amount: 300.0,
-        patientId: 'patient_6',
-        treatmentTypeId: 'treatment_2',
-      ),
-      Appointment(
-        id: '7',
-        patientName: '×ž×©×” ×œ×•×™',
-        time: '13:30',
-        duration: 30,
-        type: '×ž×¢×§×‘',
-        status: 'completed',
-        paymentStatus: 'paid',
-        amount: 200.0,
-        patientId: 'patient_7',
-        treatmentTypeId: 'treatment_1',
-      ),
-    ],
-    DateTime(2024, 1, 17): [
-      Appointment(
-        id: '8',
-        patientName: '×“×™× ×” ×©×˜×¨×Ÿ',
-        time: '09:30',
-        duration: 45,
-        type: '×™×™×¢×•×¥ ×ž×•×ž×—×”',
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        amount: 400.0,
-        patientId: 'patient_8',
-        treatmentTypeId: 'treatment_3',
-      ),
-      Appointment(
-        id: '9',
-        patientName: '×™×•× ×ª×Ÿ ×‘×¨×§',
-        time: '11:30',
-        duration: 30,
-        type: '×‘×“×™×§×” ×›×œ×œ×™×ª',
-        status: 'in_progress',
-        paymentStatus: 'offline',
-        amount: 200.0,
-        patientId: 'patient_9',
-        treatmentTypeId: 'treatment_1',
-      ),
-      Appointment(
-        id: '10',
-        patientName: '×ª×ž×¨ ×¨×•×–×Ÿ',
-        time: '14:00',
-        duration: 45,
-        type: '×‘×“×™×§×” ×’×•×¤× ×™×ª',
-        status: 'pending',
-        paymentStatus: 'pending',
-        amount: 300.0,
-        patientId: 'patient_10',
-        treatmentTypeId: 'treatment_2',
-      ),
-    ],
-    DateTime(2024, 1, 18): [
-      Appointment(
-        id: '11',
-        patientName: '××œ×™×”×• ×›×”×Ÿ',
-        time: '08:00',
-        duration: 30,
-        type: '×™×™×¢×•×¥ ×›×œ×œ×™',
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        amount: 200.0,
-        patientId: 'patient_11',
-        treatmentTypeId: 'treatment_1',
-      ),
-      Appointment(
-        id: '12',
-        patientName: '× ×¢×ž×™ ×’×•×œ×“',
-        time: '10:00',
-        duration: 45,
-        type: '×‘×“×™×§×” ×’×•×¤× ×™×ª',
-        status: 'completed',
-        paymentStatus: 'paid',
-        amount: 300.0,
-        patientId: 'patient_12',
-        treatmentTypeId: 'treatment_2',
-      ),
-      Appointment(
-        id: '13',
-        patientName: '×©×ž×•××œ ×œ×•×™',
-        time: '12:00',
-        duration: 30,
-        type: '×ž×¢×§×‘',
-        status: 'in_progress',
-        paymentStatus: 'pending',
-        amount: 200.0,
-        patientId: 'patient_13',
-        treatmentTypeId: 'treatment_1',
-      ),
-    ],
-    DateTime(2024, 1, 19): [
-      Appointment(
-        id: '14',
-        patientName: '×¨×—×œ ××‘×¨×”×',
-        time: '09:00',
-        duration: 45,
-        type: '×™×™×¢×•×¥ ×ž×•×ž×—×”',
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        amount: 400.0,
-        patientId: 'patient_14',
-        treatmentTypeId: 'treatment_3',
-      ),
-      Appointment(
-        id: '15',
-        patientName: '×™×•×¡×£ ×‘×¨×§',
-        time: '11:00',
-        duration: 30,
-        type: '×‘×“×™×§×” ×›×œ×œ×™×ª',
-        status: 'pending',
-        paymentStatus: 'pending',
-        amount: 200.0,
-        patientId: 'patient_15',
-        treatmentTypeId: 'treatment_1',
-      ),
-    ],
-  };
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('×œ×•×— ×–×ž× ×™× - ×¨×•×¤×'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshSettings,
-            tooltip: '×¨×¢× ×Ÿ ×”×’×“×¨×•×ª',
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _addAppointment,
-            tooltip: '×”×•×¡×£ ×ª×•×¨',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _openSettings,
-            tooltip: '×”×’×“×¨×•×ª',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Calendar
-          Card(
-            margin: const EdgeInsets.all(16),
-            child: TableCalendar<Appointment>(
-              firstDay: DateTime.utc(2020, 1, 1),
-              lastDay: DateTime.utc(2030, 12, 31),
-              focusedDay: _focusedDay,
-              calendarFormat: _calendarFormat,
-              eventLoader: _getAppointmentsForDay,
-              startingDayOfWeek: StartingDayOfWeek.sunday,
-              enabledDayPredicate: _isDayEnabled,
-              calendarStyle: const CalendarStyle(
-                outsideDaysVisible: false,
-                weekendTextStyle: TextStyle(color: Colors.red),
-                holidayTextStyle: TextStyle(color: Colors.red),
-                disabledTextStyle: TextStyle(color: Colors.grey),
-              ),
-              headerStyle: const HeaderStyle(
-                formatButtonVisible: true,
-                titleCentered: true,
-                formatButtonShowsNext: false,
-                formatButtonDecoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.all(Radius.circular(12.0)),
-                ),
-                formatButtonTextStyle: TextStyle(
-                  color: Colors.white,
-                ),
-              ),
-              onDaySelected: _onDaySelected,
-              onFormatChanged: (format) {
-                if (_calendarFormat != format) {
-                  setState(() {
-                    _calendarFormat = format;
-                  });
-                }
-              },
-              selectedDayPredicate: (day) {
-                return isSameDay(_selectedDay, day);
-              },
-            ),
-          ),
-          // Treatment types and break periods info
-          _buildSettingsInfo(),
-          // Selected day appointments
-          Expanded(
-            child: ValueListenableBuilder<List<Appointment>>(
-              valueListenable: _selectedAppointments,
-              builder: (context, appointments, _) {
-                return _buildAppointmentsList(appointments);
-              },
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_isLoadingAppointments)
-            FloatingActionButton(
-              onPressed: null,
-              child: const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              ),
-              tooltip: 'טוען תורים...',
-            )
-          else
-            FloatingActionButton(
-              onPressed: () {
-                _loadAppointmentsFromAPI();
-              },
-              heroTag: 'refresh',
-              child: const Icon(Icons.refresh),
-              tooltip: 'רענן תורים',
-            ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            onPressed: _addAppointment,
-            child: const Icon(Icons.add),
-            tooltip: 'הוסף תור חדש',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsInfo() {
-    return Card(
-      margin: const EdgeInsets.all(8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.info_outline, color: Colors.blue),
-                const SizedBox(width: 8),
-                const Text(
-                  '×”×’×“×¨×•×ª ×¤×¢×™×œ×•×ª',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '×˜×™×¤×•×œ×™× ×–×ž×™× ×™×: ${_selectedTreatmentTypes.map((t) => t.name).join(', ')}',
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '×”×¤×¡×§×•×ª: ${_selectedBreakPeriods.map((bp) => bp.name).join(', ')}',
-              style: const TextStyle(fontSize: 14),
+    final dayAppointments = _appointmentsForDay(_selectedDay);
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('יומן רופא'),
+          actions: [
+            IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh), tooltip: 'רענון'),
+            IconButton(
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      await _saveSchedule();
+                    },
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.save),
+              tooltip: 'שמירת הגדרות',
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildAppointmentsList(List<Appointment> appointments) {
-    if (appointments.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.event_busy,
-              size: 64,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
-            Text(
-              '××™×Ÿ ×ª×•×¨×™× ×‘×™×•× ×–×”',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: appointments.length,
-      itemBuilder: (context, index) {
-        final appointment = appointments[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _getStatusColor(appointment.status),
-              child: Icon(
-                _getStatusIcon(appointment.status),
-                color: Colors.white,
-              ),
-            ),
-            title: Text(
-              appointment.patientName,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('×©×¢×”: ${appointment.time}'),
-                Text('×¡×•×’: ${appointment.type}'),
-                Text('×ž×©×š: ${appointment.duration} ×“×§×•×ª'),
-                Text('×¡×›×•×: â‚ª${appointment.amount.toStringAsFixed(0)}'),
-                Row(
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(12),
+                child: Column(
                   children: [
-                    Icon(
-                      _getPaymentStatusIcon(appointment.paymentStatus),
-                      size: 16,
-                      color: _getPaymentStatusColor(appointment.paymentStatus),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: TableCalendar<Map<String, dynamic>>(
+                          firstDay: DateTime.utc(2020, 1, 1),
+                          lastDay: DateTime.utc(2035, 12, 31),
+                          focusedDay: _focusedDay,
+                          calendarFormat: _calendarFormat,
+                          eventLoader: _appointmentsForDay,
+                          selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
+                          enabledDayPredicate: (day) => !_isBlockedDay(day),
+                          onDaySelected: (selectedDay, focusedDay) {
+                            setState(() {
+                              _selectedDay = selectedDay;
+                              _focusedDay = focusedDay;
+                            });
+                          },
+                          onFormatChanged: (format) => setState(() => _calendarFormat = format),
+                          calendarBuilders: CalendarBuilders<Map<String, dynamic>>(
+                            defaultBuilder: (context, day, focusedDay) {
+                              final kind = _timeOffKindForDay(day);
+                              if (kind == null) return null;
+                              final isSelected = isSameDay(day, _selectedDay);
+                              final bg = kind
+                                  ? Colors.deepOrange.shade100
+                                  : Colors.blueGrey.shade200;
+                              return Container(
+                                margin: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: bg,
+                                  shape: BoxShape.circle,
+                                  border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${day.day}',
+                                  style: TextStyle(
+                                    color: _isBlockedDay(day) ? Colors.grey.shade700 : null,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          calendarStyle: const CalendarStyle(
+                            disabledTextStyle: TextStyle(color: Colors.grey),
+                            holidayTextStyle: TextStyle(color: Colors.red),
+                            weekendTextStyle: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _getPaymentStatusText(appointment.paymentStatus),
-                      style: TextStyle(
-                        color: _getPaymentStatusColor(appointment.paymentStatus),
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('שעות עבודה לפי יום', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            ...List.generate(7, (i) {
+                              final start = _workingHours[i]?['start'] ?? '';
+                              final end = _workingHours[i]?['end'] ?? '';
+                              final active = start.isNotEmpty && end.isNotEmpty;
+                              return Row(
+                                children: [
+                                  SizedBox(width: 70, child: Text(_dayNames[i])),
+                                  Switch(
+                                    value: active,
+                                    onChanged: (v) {
+                                      setState(() {
+                                        if (!v) {
+                                          _workingHours[i] = {'start': '', 'end': ''};
+                                        } else {
+                                          _workingHours[i] = {'start': '09:00', 'end': '17:00'};
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  Expanded(
+                                    child: Text(active ? '$start - $end' : 'לא עובד'),
+                                  ),
+                                  IconButton(
+                                    onPressed: active
+                                        ? () async {
+                                            await _pickTime(i, 'start');
+                                            await _pickTime(i, 'end');
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.access_time),
+                                  ),
+                                ],
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text('הפסקות', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                ),
+                                TextButton.icon(
+                                  onPressed: _addBreakDialog,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('הוסף הפסקה'),
+                                ),
+                              ],
+                            ),
+                            if (_breaks.isEmpty) const Text('לא הוגדרו הפסקות'),
+                            ..._breaks.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              final b = entry.value;
+                              return ListTile(
+                                title: Text('${_dayNames[b['day_of_week'] as int]} ${b['start_time']} - ${b['end_time']}'),
+                                trailing: IconButton(
+                                  onPressed: () => setState(() => _breaks.removeAt(idx)),
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text('חגים וחופשות', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                ),
+                                TextButton.icon(
+                                  onPressed: _addTimeOffDialog,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('הוסף'),
+                                ),
+                              ],
+                            ),
+                            if (_timeOff.isEmpty) const Text('לא הוגדרו חגים/חופשות'),
+                            ..._timeOff.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              final item = entry.value;
+                              final startDate = _normalizeIncomingDate((item['start_date'] ?? '').toString());
+                              final endDate = _normalizeIncomingDate((item['end_date'] ?? '').toString());
+                              final title =
+                                  '$startDate עד $endDate ${item['is_holiday'] == true ? '(חג)' : '(חופשה)'}';
+                              final subtitle = (item['reason'] ?? '').toString();
+                              return ListTile(
+                                title: Text(title),
+                                subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                                trailing: IconButton(
+                                  onPressed: () => setState(() => _timeOff.removeAt(idx)),
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'תורים בתאריך ${_formatLocalYmd(_selectedDay)}',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            if (dayAppointments.isEmpty) const Text('אין תורים ליום זה'),
+                            ...dayAppointments.map((apt) {
+                              final dt = DateTime.tryParse((apt['appointment_date'] ?? '').toString());
+                              final local = dt?.toLocal();
+                              final time = local == null
+                                  ? '--:--'
+                                  : '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+                              final name = _calendarPatientName(apt);
+                              final phone = _calendarPatientPhone(apt);
+                              final status = (apt['status'] ?? 'scheduled').toString();
+                              final aid = (apt['id'] ?? '').toString();
+                              final busy = _resendingNotificationAppointmentId == aid;
+                              return ListTile(
+                                leading: const Icon(Icons.event_note),
+                                title: Text(name),
+                                subtitle: Text(
+                                  [
+                                    time,
+                                    if (phone != null) '☎ $phone',
+                                    'סטטוס: $status',
+                                  ].join(' • '),
+                                ),
+                                isThreeLine: phone != null,
+                                trailing: IconButton(
+                                  tooltip: 'שלח הודעה שוב למטופל',
+                                  onPressed:
+                                      busy || aid.isEmpty ? null : () => _resendPatientNotification(apt),
+                                  icon: busy
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.send_outlined),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-            trailing: PopupMenuButton<String>(
-              onSelected: (value) => _handleAppointmentAction(value, appointment),
-              itemBuilder: (context) => _buildAppointmentMenuItems(appointment),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  List<PopupMenuEntry<String>> _buildAppointmentMenuItems(Appointment appointment) {
-    List<PopupMenuEntry<String>> items = [];
-    
-    // Common actions
-    items.addAll([
-      const PopupMenuItem(
-        value: 'edit',
-        child: Row(
-          children: [
-            Icon(Icons.edit),
-            SizedBox(width: 8),
-            Text('×¢×¨×•×š'),
-          ],
-        ),
-      ),
-      const PopupMenuItem(
-        value: 'cancel',
-        child: Row(
-          children: [
-            Icon(Icons.cancel),
-            SizedBox(width: 8),
-            Text('×‘×˜×œ'),
-          ],
-        ),
-      ),
-    ]);
-    
-    // Status-specific actions
-    if (appointment.status == 'in_progress') {
-      items.addAll([
-        const PopupMenuItem(
-          value: 'book_next',
-          child: Row(
-            children: [
-              Icon(Icons.add_circle),
-              SizedBox(width: 8),
-              Text('×§×‘×¢ ×ª×•×¨ × ×•×¡×£'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'request_payment',
-          child: Row(
-            children: [
-              Icon(Icons.payment),
-              SizedBox(width: 8),
-              Text('×‘×§×© ×ª×©×œ×•×'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'pay_offline',
-          child: Row(
-            children: [
-              Icon(Icons.credit_card),
-              SizedBox(width: 8),
-              Text('×ª×©×œ×•× ××•×¤×œ×™×™×Ÿ'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'complete',
-          child: Row(
-            children: [
-              Icon(Icons.check),
-              SizedBox(width: 8),
-              Text('×¡×™×™× ×˜×™×¤×•×œ'),
-            ],
-          ),
-        ),
-      ]);
-    } else if (appointment.status == 'confirmed') {
-      items.add(const PopupMenuItem(
-        value: 'start',
-        child: Row(
-          children: [
-            Icon(Icons.play_arrow),
-            SizedBox(width: 8),
-            Text('×”×ª×—×œ ×˜×™×¤×•×œ'),
-          ],
-        ),
-      ));
-    } else if (appointment.status == 'pending') {
-      items.add(const PopupMenuItem(
-        value: 'confirm',
-        child: Row(
-          children: [
-            Icon(Icons.check_circle),
-            SizedBox(width: 8),
-            Text('××©×¨ ×ª×•×¨'),
-          ],
-        ),
-      ));
-    }
-    
-    return items;
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'confirmed':
-        return Colors.green;
-      case 'pending':
-        return Colors.orange;
-      case 'cancelled':
-        return Colors.red;
-      case 'completed':
-        return Colors.blue;
-      case 'in_progress':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getStatusIcon(String status) {
-    switch (status) {
-      case 'confirmed':
-        return Icons.check_circle;
-      case 'pending':
-        return Icons.schedule;
-      case 'cancelled':
-        return Icons.cancel;
-      case 'completed':
-        return Icons.done;
-      case 'in_progress':
-        return Icons.play_circle;
-      default:
-        return Icons.help;
-    }
-  }
-
-  Color _getPaymentStatusColor(String paymentStatus) {
-    switch (paymentStatus) {
-      case 'paid':
-        return Colors.green;
-      case 'pending':
-        return Colors.orange;
-      case 'offline':
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getPaymentStatusIcon(String paymentStatus) {
-    switch (paymentStatus) {
-      case 'paid':
-        return Icons.check_circle;
-      case 'pending':
-        return Icons.payment;
-      case 'offline':
-        return Icons.credit_card;
-      default:
-        return Icons.help;
-    }
-  }
-
-  String _getPaymentStatusText(String paymentStatus) {
-    switch (paymentStatus) {
-      case 'paid':
-        return '×©×•×œ×';
-      case 'pending':
-        return '×ž×ž×ª×™×Ÿ ×œ×ª×©×œ×•×';
-      case 'offline':
-        return '×ª×©×œ×•× ××•×¤×œ×™×™×Ÿ';
-      default:
-        return '×œ× ×™×“×•×¢';
-    }
-  }
-
-  void _addAppointment() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('×”×•×¡×£ ×ª×•×¨ ×—×“×©'),
-        content: const Text('×¤×•× ×§×¦×™×•× ×œ×™×•×ª ×–×• ×ª×”×™×” ×–×ž×™× ×” ×‘×§×¨×•×‘'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('××™×©×•×¨'),
-          ),
-        ],
+              ),
       ),
     );
   }
 
-  void _openSettings() {
-    Navigator.pushNamed(context, '/doctor-treatment-settings');
+  int? _timeToMinutes(String value) {
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return h * 60 + m;
   }
 
-  void _handleAppointmentAction(String action, Appointment appointment) {
-    switch (action) {
-      case 'edit':
-        _editAppointment(appointment);
-        break;
-      case 'cancel':
-        _cancelAppointment(appointment);
-        break;
-      case 'complete':
-        _completeAppointment(appointment);
-        break;
-      case 'start':
-        _startAppointment(appointment);
-        break;
-      case 'confirm':
-        _confirmAppointment(appointment);
-        break;
-      case 'book_next':
-        _bookNextAppointment(appointment);
-        break;
-      case 'request_payment':
-        _requestPayment(appointment);
-        break;
-      case 'pay_offline':
-        _payOffline(appointment);
-        break;
-    }
+  /// Calendar date string from local [DateTime] (no UTC shift).
+  String _formatLocalYmd(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
   }
 
-  void _editAppointment(Appointment appointment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('×¢×¨×™×›×ª ×ª×•×¨ - ×¤×•× ×§×¦×™×•× ×œ×™×•×ª ×‘×§×¨×•×‘')),
-    );
+  /// Parse API / DB value to a **local calendar** date (fixes `T…Z` off-by-one).
+  String _normalizeIncomingDate(String raw) {
+    return _formatLocalYmd(_parseYmdLocal(raw));
   }
 
-  void _cancelAppointment(Appointment appointment) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('×‘×™×˜×•×œ ×ª×•×¨'),
-        content: Text('×”×× ××ª×” ×‘×˜×•×— ×©×‘×¨×¦×•× ×š ×œ×‘×˜×œ ××ª ×”×ª×•×¨ ×©×œ ${appointment.patientName}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('×‘×™×˜×•×œ'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('×”×ª×•×¨ ×‘×•×˜×œ ×‘×”×¦×œ×—×”')),
-              );
-            },
-            child: const Text('××™×©×•×¨'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _completeAppointment(Appointment appointment) async {
-    final result = await Navigator.pushNamed(
-      context,
-      '/treatment-completion',
-      arguments: {
-        'appointmentId': appointment.id,
-        'patientId': appointment.patientId ?? 'unknown',
-        'patientName': appointment.patientName,
-        'treatmentTypeId': appointment.treatmentTypeId ?? 'unknown',
-        'treatmentTypeName': appointment.type,
-        'amount': appointment.amount,
-      },
-    );
-    
-    // Reload appointments after treatment completion to sync calendar
-    if (result == true) {
-      await _loadAppointmentsFromAPI();
-    }
-  }
-
-  void _startAppointment(Appointment appointment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('×”×ª×—×œ×ª ×˜×™×¤×•×œ ×¢×‘×•×¨ ${appointment.patientName}'),
-        backgroundColor: Colors.blue,
-      ),
-    );
-  }
-
-  Future<void> _confirmAppointment(Appointment appointment) async {
-    try {
-      await _appointmentService.confirmAppointment(appointment.id);
-      
-      // Reload appointments to sync with calendar
-      await _loadAppointmentsFromAPI();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('תור של ${appointment.patientName} אושר והותאם ללוח שנה'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('שגיאה באישור התור: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+  DateTime _parseYmdLocal(String raw) {
+    final t = raw.trim();
+    if (t.length >= 10 && !t.contains('T') && !t.contains(' ')) {
+      final core = t.substring(0, 10);
+      final p = core.split('-');
+      if (p.length == 3) {
+        final y = int.tryParse(p[0]);
+        final m = int.tryParse(p[1]);
+        final d = int.tryParse(p[2]);
+        if (y != null && m != null && d != null) return DateTime(y, m, d);
       }
     }
+    final dt = DateTime.tryParse(t);
+    if (dt == null) return DateTime(1970);
+    final l = dt.toLocal();
+    return DateTime(l.year, l.month, l.day);
   }
 
-  void _bookNextAppointment(Appointment appointment) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('×§×‘×¢ ×ª×•×¨ × ×•×¡×£'),
-        content: Text('×§×‘×¢ ×ª×•×¨ × ×•×¡×£ ×¢×‘×•×¨ ${appointment.patientName}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('×‘×™×˜×•×œ'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('×ª×•×¨ × ×•×¡×£ × ×§×‘×¢ ×¢×‘×•×¨ ${appointment.patientName}'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('××™×©×•×¨'),
-          ),
-        ],
-      ),
-    );
+  bool _hasExactSameRangeOppositeType(String startYmd, String endYmd, bool newHoliday) {
+    return _timeOff.any((e) {
+      final s = _normalizeIncomingDate((e['start_date'] ?? '').toString());
+      final en = _normalizeIncomingDate((e['end_date'] ?? '').toString());
+      final h = e['is_holiday'] == true;
+      return s == startYmd && en == endYmd && h != newHoliday;
+    });
   }
 
-  void _requestPayment(Appointment appointment) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('×‘×§×© ×ª×©×œ×•×'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('×©×œ×— ×‘×§×©×” ×œ×ª×©×œ×•× ×¢×‘×•×¨ ${appointment.patientName}'),
-            const SizedBox(height: 16),
-            Text('×¡×›×•×: â‚ª${appointment.amount.toStringAsFixed(0)}'),
-            const SizedBox(height: 16),
-            const Text('×”×‘×§×©×” ×ª×™×©×œ×— ×œ×•×•×˜×¡××¤'),
-          ],
+  List<Map<String, Object>> _integrateTimeOffRange(
+    List<Map<String, Object>> current,
+    String newStartYmd,
+    String newEndYmd,
+    bool newHoliday,
+    String reason,
+  ) {
+    final ns = _parseYmdLocal(newStartYmd);
+    final ne = _parseYmdLocal(newEndYmd);
+    final merged = <_OffSeg>[];
+    for (final m in current) {
+      merged.add(
+        _OffSeg(
+          _parseYmdLocal((m['start_date'] ?? '').toString()),
+          _parseYmdLocal((m['end_date'] ?? '').toString()),
+          m['is_holiday'] == true,
+          (m['reason'] ?? '').toString(),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('×‘×™×˜×•×œ'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _sendWhatsAppPaymentRequest(appointment);
-            },
-            child: const Text('×©×œ×— ×‘×§×©×”'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
+    final afterSubtract = <_OffSeg>[];
+    for (final e in merged) {
+      if (e.isHoliday == newHoliday) {
+        afterSubtract.add(e);
+        continue;
+      }
+      afterSubtract.addAll(_subtractInclusive(e, ns, ne));
+    }
+    final withoutOverlapSame = afterSubtract
+        .where((e) => e.isHoliday != newHoliday || !_rangesOverlapInclusive(e.start, e.end, ns, ne))
+        .toList();
+    withoutOverlapSame.add(_OffSeg(ns, ne, newHoliday, reason));
+    return _mergeAllIntervals(withoutOverlapSame).map((e) => e.toMap()).toList();
   }
 
-  void _payOffline(Appointment appointment) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('×ª×©×œ×•× ××•×¤×œ×™×™×Ÿ'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('×¡×ž×Ÿ ×ª×©×œ×•× ××•×¤×œ×™×™×Ÿ ×¢×‘×•×¨ ${appointment.patientName}'),
-            const SizedBox(height: 16),
-            Text('×¡×›×•×: â‚ª${appointment.amount.toStringAsFixed(0)}'),
-            const SizedBox(height: 16),
-            const Text('×”×ª×©×œ×•× ×‘×•×¦×¢ ×‘×ž×›×•× ×ª ×›×¨×˜×™×¡×™ ××©×¨××™ ××• ×‘×ž×–×•×ž×Ÿ'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('×‘×™×˜×•×œ'),
+  List<Map<String, Object>> _mergeTimeOffAfterLoad(List<Map<String, Object>> input) {
+    final segs = input
+        .map(
+          (m) => _OffSeg(
+            _parseYmdLocal((m['start_date'] ?? '').toString()),
+            _parseYmdLocal((m['end_date'] ?? '').toString()),
+            m['is_holiday'] == true,
+            (m['reason'] ?? '').toString(),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('×ª×©×œ×•× ××•×¤×œ×™×™×Ÿ ×¡×•×ž×Ÿ ×¢×‘×•×¨ ${appointment.patientName}'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            },
-            child: const Text('××™×©×•×¨'),
-          ),
-        ],
-      ),
-    );
+        )
+        .where((s) => !s.start.isAfter(s.end))
+        .toList();
+    return _mergeAllIntervals(segs).map((e) => e.toMap()).toList();
   }
 
-  void _sendWhatsAppPaymentRequest(Appointment appointment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('×”×•×“×¢×ª ×ª×©×œ×•× × ×©×œ×—×” ×œ×•×•×˜×¡××¤ ×©×œ ${appointment.patientName}'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+  List<_OffSeg> _subtractInclusive(_OffSeg e, DateTime ns, DateTime ne) {
+    final os = e.start.isAfter(ns) ? e.start : ns;
+    final oe = e.end.isBefore(ne) ? e.end : ne;
+    if (os.isAfter(oe)) return [e];
+    final out = <_OffSeg>[];
+    if (e.start.isBefore(os)) {
+      out.add(_OffSeg(e.start, _addDays(os, -1), e.isHoliday, e.reason));
+    }
+    if (oe.isBefore(e.end)) {
+      out.add(_OffSeg(_addDays(oe, 1), e.end, e.isHoliday, e.reason));
+    }
+    return out.where((s) => !s.start.isAfter(s.end)).toList();
   }
+
+  DateTime _addDays(DateTime d, int n) =>
+      DateTime(d.year, d.month, d.day).add(Duration(days: n));
+
+  bool _rangesOverlapInclusive(DateTime a1, DateTime a2, DateTime b1, DateTime b2) {
+    return !a1.isAfter(b2) && !b1.isAfter(a2);
+  }
+
+  List<_OffSeg> _mergeAllIntervals(List<_OffSeg> list) {
+    final out = <_OffSeg>[];
+    for (final holiday in [false, true]) {
+      final group = list.where((s) => s.isHoliday == holiday).toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
+      _OffSeg? cur;
+      for (final seg in group) {
+        if (cur == null) {
+          cur = seg;
+        } else if (!seg.start.isAfter(_addDays(cur.end, 1))) {
+          cur = _OffSeg(
+            cur.start,
+            seg.end.isAfter(cur.end) ? seg.end : cur.end,
+            holiday,
+            seg.reason.isNotEmpty ? seg.reason : cur.reason,
+          );
+        } else {
+          out.add(cur);
+          cur = seg;
+        }
+      }
+      if (cur != null) out.add(cur);
+    }
+    return out;
+  }
+
+  String _breakKey(Map<String, Object> item) {
+    return '${item['day_of_week']}|${item['start_time']}|${item['end_time']}';
+  }
+
+  List<Map<String, Object>> _dedupeBreaks(List<Map<String, Object>> input) {
+    final seen = <String>{};
+    final result = <Map<String, Object>>[];
+    for (final item in input) {
+      final key = _breakKey(item);
+      if (seen.contains(key)) continue;
+      seen.add(key);
+      result.add(item);
+    }
+    return result;
+  }
+
+  bool _hasBreakDuplicate(int day, String start, String end) {
+    final key = '$day|$start|$end';
+    return _breaks.any((b) => _breakKey(b) == key);
+  }
+
+}
+
+class _OffSeg {
+  _OffSeg(this.start, this.end, this.isHoliday, this.reason);
+
+  final DateTime start;
+  final DateTime end;
+  final bool isHoliday;
+  final String reason;
+
+  Map<String, Object> toMap() => <String, Object>{
+        'start_date':
+            '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}',
+        'end_date':
+            '${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}',
+        'reason': reason,
+        'is_holiday': isHoliday,
+      };
 }

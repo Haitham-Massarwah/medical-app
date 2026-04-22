@@ -2,6 +2,17 @@ import '../core/network/http_client.dart';
 
 class AppointmentService {
   final HttpClient _httpClient = HttpClient();
+  static final RegExp _uuidRegex = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  String _requireValidPatientId(String patientId) {
+    final normalized = patientId.trim();
+    if (!_uuidRegex.hasMatch(normalized)) {
+      throw const FormatException('Valid patient ID is required');
+    }
+    return normalized;
+  }
   
   List<DateTime> _parseSlotDates(dynamic data) {
     if (data is! List) return [];
@@ -12,8 +23,9 @@ class AppointmentService {
   }
   
   String _formatTime(DateTime dateTime) {
-    final hour = dateTime.hour.toString().padLeft(2, '0');
-    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final l = dateTime.toLocal();
+    final hour = l.hour.toString().padLeft(2, '0');
+    final minute = l.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
   }
 
@@ -36,7 +48,8 @@ class AppointmentService {
       final slots = _parseSlotDates(response['data']);
       final uniqueDates = <DateTime>{};
       for (final slot in slots) {
-        uniqueDates.add(DateTime(slot.year, slot.month, slot.day));
+        final l = slot.toLocal();
+        uniqueDates.add(DateTime(l.year, l.month, l.day));
       }
       final result = uniqueDates.toList()..sort((a, b) => a.compareTo(b));
       return result;
@@ -63,10 +76,12 @@ class AppointmentService {
       );
 
       final slots = _parseSlotDates(response['data']);
-      final filtered = slots.where((slot) =>
-          slot.year == date.year &&
-          slot.month == date.month &&
-          slot.day == date.day);
+      final filtered = slots.where((slot) {
+        final l = slot.toLocal();
+        return l.year == date.year &&
+            l.month == date.month &&
+            l.day == date.day;
+      });
       final times = filtered.map(_formatTime).toSet().toList()
         ..sort();
       return times;
@@ -77,26 +92,25 @@ class AppointmentService {
   }
 
   /// Book an appointment. When doctor books for a patient, pass patientId.
+  /// Returns API JSON: `data` (appointment), `booking_meta` (overbooking info).
   Future<Map<String, dynamic>> bookAppointment({
     required String doctorId,
     required DateTime appointmentDate,
     required String timeSlot,
     String? notes,
     String? patientId,
+    Map<String, dynamic>? guestPatient,
   }) async {
-    try {
-      final body = <String, dynamic>{
-        'doctorId': doctorId,
-        'appointmentDate': appointmentDate.toIso8601String(),
-        'timeSlot': timeSlot,
-        if (notes != null) 'notes': notes,
-        if (patientId != null) 'patientId': patientId,
-      };
-      final response = await _httpClient.post('/appointments', body);
-      return response;
-    } catch (e) {
-      throw Exception('Failed to book appointment: $e');
-    }
+    final body = <String, dynamic>{
+      'doctorId': doctorId,
+      'appointmentDate': appointmentDate.toIso8601String(),
+      'timeSlot': timeSlot,
+      if (notes != null) 'notes': notes,
+      if (patientId != null) 'patientId': _requireValidPatientId(patientId),
+      if (guestPatient != null) 'guestPatient': guestPatient,
+    };
+    final response = await _httpClient.post('/appointments', body);
+    return response;
   }
 
   /// Get user's appointments
@@ -150,6 +164,11 @@ class AppointmentService {
     } catch (e) {
       throw Exception('Failed to confirm appointment: $e');
     }
+  }
+
+  /// Re-send the post-booking patient notification (WhatsApp/Telegram/email per server config).
+  Future<void> resendPatientNotification(String appointmentId) async {
+    await _httpClient.post('/appointments/$appointmentId/resend-notification', {});
   }
 
   /// Update appointment status
