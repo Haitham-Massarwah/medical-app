@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import db from '../config/database';
 import { AuthorizationError, ValidationError } from '../middleware/errorHandler';
+import { sendEmail } from '../services/email.service';
 
-const STAFF_ROLES = ['admin', 'developer', 'doctor', 'receptionist', 'paramedical'];
+const STAFF_ROLES = ['admin', 'developer', 'doctor', 'paramedical'];
 const TEMPLATE_ADMIN_ROLES = ['admin', 'developer'];
 
 export class CrmController {
@@ -94,11 +95,13 @@ export class CrmController {
     const lead = await db('crm_leads').where({ id: lead_id, tenant_id: tenantId }).first();
     if (!lead) throw new ValidationError('Lead not found');
 
-    const [followup] = await db('crm_followups')
+    const selectedChannel = (channel || 'sms').toString();
+
+    let [followup] = await db('crm_followups')
       .insert({
         tenant_id: tenantId,
         lead_id,
-        channel: channel || 'sms',
+        channel: selectedChannel,
         message,
         due_at: due_at || null,
         status: 'pending',
@@ -107,6 +110,44 @@ export class CrmController {
         updated_at: new Date(),
       })
       .returning('*');
+
+    if (selectedChannel === 'email') {
+      const recipientEmail = (lead.email || '').toString().trim();
+      if (!recipientEmail) {
+        throw new ValidationError('Lead has no email address');
+      }
+
+      try {
+        await sendEmail({
+          to: recipientEmail,
+          subject: `מעקב מהמזכירות - ${lead.full_name || 'Lead'}`,
+          template: 'crm-followup',
+          data: {
+            leadName: lead.full_name || 'Lead',
+            message,
+          },
+        });
+
+        const [updated] = await db('crm_followups')
+          .where({ id: followup.id, tenant_id: tenantId })
+          .update({
+            status: 'completed',
+            completed_at: new Date(),
+            updated_at: new Date(),
+          })
+          .returning('*');
+        if (updated) followup = updated;
+      } catch (_error) {
+        await db('crm_followups')
+          .where({ id: followup.id, tenant_id: tenantId })
+          .update({
+            status: 'failed',
+            updated_at: new Date(),
+          });
+        throw new ValidationError('Failed to send email follow-up');
+      }
+    }
+
     res.status(201).json({ status: 'success', data: { followup } });
   }
 

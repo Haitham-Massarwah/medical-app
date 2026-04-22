@@ -49,7 +49,12 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
   // Check if recipient is allowed
   if (!canSendEmail(options.to)) {
     logger.warn(`Email sending blocked to ${options.to}. Address not in allowed list.`);
-    return; // Silently fail - don't send to unauthorized addresses
+    if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
+      throw new Error(
+        'Email is not allowed for this address. Set EMAIL_ALLOW_ALL_RECIPIENTS=true when SMTP is configured, or add the address to the allowlist.'
+      );
+    }
+    return;
   }
   
   try {
@@ -184,7 +189,25 @@ const generateEmailHTML = (template: string, data: any): string => {
         </html>
       `;
 
-    case 'appointment-confirmation':
+    case 'appointment-confirmation': {
+      const telUrl =
+        data.telegramConnectUrl && String(data.telegramConnectUrl).trim()
+          ? String(data.telegramConnectUrl).trim()
+          : '';
+      const telBlock = telUrl
+        ? `
+            <div style="background: #e8f4fc; padding: 20px; border-radius: 8px; margin: 24px 0; border: 1px solid #b8d4e8;">
+              <p style="margin: 0 0 8px 0; font-weight: 600;">Telegram updates</p>
+              <p style="margin: 0 0 12px 0; color: #333;">
+                Connect Telegram to receive appointment reminders and updates in the app. This one-time link opens the bot — tap <strong>Start</strong> to link your account.
+              </p>
+              <p style="margin: 0 0 12px 0; color: #333; font-size: 14px;" dir="rtl">
+                לחיבור לטלגרם לעדכוני תורים: לחצו על הכפתור, ובטלגרם — Start.
+              </p>
+              <a href="${telUrl.replace(/"/g, '&quot;')}" class="button" target="_blank" rel="noopener noreferrer">Connect Telegram</a>
+            </div>
+          `
+        : '';
       return `
         <!DOCTYPE html>
         <html>
@@ -203,6 +226,7 @@ const generateEmailHTML = (template: string, data: any): string => {
               <p><strong>Location:</strong> ${data.location}</p>
             </div>
             <p>Please arrive 10 minutes early.</p>
+            ${telBlock}
           </div>
           <div class="footer">
             <p>Need to reschedule? Contact us or use the app.</p>
@@ -210,6 +234,7 @@ const generateEmailHTML = (template: string, data: any): string => {
         </body>
         </html>
       `;
+    }
 
     case 'appointment-reminder':
       return `
@@ -288,6 +313,49 @@ const generateEmailHTML = (template: string, data: any): string => {
         </html>
       `;
 
+    case 'staff-account-password-setup':
+      return `
+        <!DOCTYPE html>
+        <html>
+        <head>${baseStyle}</head>
+        <body>
+          <div class="header">
+            <h1>🏥 Medical Appointment System</h1>
+          </div>
+          <div class="content">
+            <h2>Hello ${data.name || 'User'},</h2>
+            <p>An account was created for you. Please choose a password to sign in.</p>
+            <a href="${data.setupUrl}" class="button">Set password</a>
+            <p><small>If the button does not work, copy this link: ${data.setupUrl}</small></p>
+            <p><small>This link expires in 7 days.</small></p>
+          </div>
+          <div class="footer">
+            <p>If you did not expect this message, contact your clinic administrator.</p>
+          </div>
+        </body>
+        </html>
+      `;
+
+    case 'crm-followup':
+      return `
+        <!DOCTYPE html>
+        <html>
+        <head>${baseStyle}</head>
+        <body>
+          <div class="header">
+            <h1>🏥 Medical Appointment System</h1>
+          </div>
+          <div class="content">
+            <h2>Hello ${data.leadName || 'Lead'},</h2>
+            <p>${data.message || ''}</p>
+          </div>
+          <div class="footer">
+            <p>This message was sent from the clinic CRM follow-up workflow.</p>
+          </div>
+        </body>
+        </html>
+      `;
+
     default:
       return `
         <!DOCTYPE html>
@@ -317,6 +385,8 @@ export const sendAppointmentConfirmation = async (
     date: string;
     time: string;
     location: string;
+    /** Optional: https://t.me/bot?start=… one-time link to link Telegram. */
+    telegramConnectUrl?: string;
   }
 ) => {
   return sendEmail({

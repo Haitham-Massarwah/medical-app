@@ -12,9 +12,16 @@
     "test:watch": "jest --watch",
     "test:db": "node test-db-connection.js",
     "lint": "eslint -c .eslintrc.cjs src tests --ext .ts --max-warnings 0",
+    "db:auto-fix-user": "node scripts/auto-fix-db-user.cjs",
+    "clinic:secrets": "node scripts/clinic-generate-secrets.cjs",
+    "clinic:init-env": "node scripts/clinic-init-production-env.cjs",
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
-    "seed": "knex seed:run"
+    "seed": "knex seed:run",
+    "upgrade:local": "npm ci && npm run build && npm run migrate",
+    "update:check": "node scripts/check-update.cjs",
+    "upgrade:auto:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\clinic-auto-upgrade.ps1",
+    "upgrade:auto:linux": "bash ./scripts/clinic-auto-upgrade.sh"
   },
   "keywords": [
     "medical",

@@ -13,18 +13,31 @@ export interface CalendarTokens {
   updated_at?: Date;
 }
 
+function formBody(params: Record<string, string | undefined>): string {
+  const u = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') {
+      u.set(k, v);
+    }
+  }
+  return u.toString();
+}
+
 class CalendarService {
   /**
    * Exchange Google OAuth code for tokens
    */
   async exchangeGoogleCode(code: string, redirectUri: string): Promise<CalendarTokens> {
     try {
-      const response = await axios.post('https://oauth2.googleapis.com/token', {
+      const body = formBody({
         code,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
+      });
+      const response = await axios.post('https://oauth2.googleapis.com/token', body, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
       const { access_token, refresh_token, expires_in } = response.data;
@@ -35,7 +48,10 @@ class CalendarService {
         expires_at: expires_in ? new Date(Date.now() + expires_in * 1000) : undefined,
       } as CalendarTokens;
     } catch (error: any) {
-      throw new Error(`Failed to exchange Google code: ${error.message}`);
+      const detail = error.response?.data
+        ? ` ${JSON.stringify(error.response.data)}`
+        : '';
+      throw new Error(`Failed to exchange Google code: ${error.message}${detail}`);
     }
   }
 
@@ -44,7 +60,7 @@ class CalendarService {
    */
   async exchangeOutlookCode(code: string, redirectUri: string): Promise<CalendarTokens> {
     try {
-      const response = await axios.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      const body = formBody({
         code,
         client_id: process.env.OUTLOOK_CLIENT_ID,
         client_secret: process.env.OUTLOOK_CLIENT_SECRET,
@@ -52,6 +68,11 @@ class CalendarService {
         grant_type: 'authorization_code',
         scope: 'https://graph.microsoft.com/Calendars.ReadWrite',
       });
+      const response = await axios.post(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        body,
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
 
       const { access_token, refresh_token, expires_in } = response.data;
 
@@ -61,7 +82,10 @@ class CalendarService {
         expires_at: expires_in ? new Date(Date.now() + expires_in * 1000) : undefined,
       } as CalendarTokens;
     } catch (error: any) {
-      throw new Error(`Failed to exchange Outlook code: ${error.message}`);
+      const detail = error.response?.data
+        ? ` ${JSON.stringify(error.response.data)}`
+        : '';
+      throw new Error(`Failed to exchange Outlook code: ${error.message}${detail}`);
     }
   }
 
@@ -122,11 +146,14 @@ class CalendarService {
    */
   async refreshGoogleToken(refreshToken: string): Promise<{ access_token: string; expires_at: Date }> {
     try {
-      const response = await axios.post('https://oauth2.googleapis.com/token', {
+      const body = formBody({
         refresh_token: refreshToken,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
         grant_type: 'refresh_token',
+      });
+      const response = await axios.post('https://oauth2.googleapis.com/token', body, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
       const { access_token, expires_in } = response.data;
@@ -136,7 +163,10 @@ class CalendarService {
         expires_at: new Date(Date.now() + expires_in * 1000),
       };
     } catch (error: any) {
-      throw new Error(`Failed to refresh Google token: ${error.message}`);
+      const detail = error.response?.data
+        ? ` ${JSON.stringify(error.response.data)}`
+        : '';
+      throw new Error(`Failed to refresh Google token: ${error.message}${detail}`);
     }
   }
 
@@ -145,13 +175,18 @@ class CalendarService {
    */
   async refreshOutlookToken(refreshToken: string): Promise<{ access_token: string; expires_at: Date }> {
     try {
-      const response = await axios.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      const body = formBody({
         refresh_token: refreshToken,
         client_id: process.env.OUTLOOK_CLIENT_ID,
         client_secret: process.env.OUTLOOK_CLIENT_SECRET,
         grant_type: 'refresh_token',
         scope: 'https://graph.microsoft.com/Calendars.ReadWrite',
       });
+      const response = await axios.post(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        body,
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
 
       const { access_token, expires_in } = response.data;
 
@@ -160,7 +195,10 @@ class CalendarService {
         expires_at: new Date(Date.now() + expires_in * 1000),
       };
     } catch (error: any) {
-      throw new Error(`Failed to refresh Outlook token: ${error.message}`);
+      const detail = error.response?.data
+        ? ` ${JSON.stringify(error.response.data)}`
+        : '';
+      throw new Error(`Failed to refresh Outlook token: ${error.message}${detail}`);
     }
   }
 

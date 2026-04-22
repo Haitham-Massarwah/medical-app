@@ -3,6 +3,7 @@ import { PaymentController } from '../controllers/payment.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validation.middleware';
 import { body, query, param } from 'express-validator';
+import { requireAccountPermission } from '../middleware/accountPermissions.middleware';
 
 const router = Router();
 const paymentController = new PaymentController();
@@ -13,9 +14,11 @@ const paymentController = new PaymentController();
  * @access  Public (but verified by Stripe signature)
  */
 router.post('/webhook', paymentController.handleWebhook.bind(paymentController));
+router.post('/webhooks/payment', paymentController.handleProviderWebhook.bind(paymentController));
 
 // All other routes require authentication
 router.use(authenticate);
+router.use(requireAccountPermission('can_manage_payments'));
 
 /**
  * @route   GET /api/v1/payments
@@ -58,6 +61,12 @@ router.post(
   '/:id/process',
   [param('id').isUUID().withMessage('Valid payment ID is required'), validateRequest],
   paymentController.processPayment.bind(paymentController)
+);
+
+router.post(
+  '/:id/retry',
+  [param('id').isUUID().withMessage('Valid payment ID is required'), validateRequest],
+  paymentController.retryPayment.bind(paymentController)
 );
 
 /**

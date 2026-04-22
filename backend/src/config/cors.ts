@@ -37,8 +37,13 @@ if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging')
 
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, Postman, curl, etc.)
+    // No Origin header — mobile apps, curl, Postman, server-to-server
     if (!origin) {
+      return callback(null, true);
+    }
+    // Some environments send the literal string "null" (opaque origin: email webviews,
+    // certain redirects, sandboxed documents). HTML form POST to reset-password-page hits this.
+    if (origin === 'null') {
       return callback(null, true);
     }
 

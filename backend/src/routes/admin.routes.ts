@@ -1,8 +1,14 @@
 import { Router } from 'express';
+import { validateUUID } from '../middleware/validator';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import db from '../config/database';
-
+import { systemController } from '../controllers/system.controller';
+import { requireAccountPermission } from '../middleware/accountPermissions.middleware';
+import { PermissionsController } from '../controllers/permissions.controller';
+import { PendingDoctorController } from '../controllers/pendingDoctor.controller';
 const router = Router();
+const permissionsController = new PermissionsController();
+const pendingDoctorController = new PendingDoctorController();
 
 /**
  * Database Admin Interface Routes
@@ -13,6 +19,24 @@ const router = Router();
 // Middleware: All admin routes require authentication and developer/admin role
 router.use(authenticate);
 router.use(authorize('developer', 'admin'));
+
+/**
+ * GET /api/v1/admin/system/diagnostics
+ * Version, DB + migrations, log paths (local install / online upgrade readiness)
+ */
+router.get('/system/diagnostics', systemController.getDiagnostics);
+
+/**
+ * GET /api/v1/admin/system/logs/tail?lines=150
+ * Optional log tail when ADMIN_ALLOW_LOG_TAIL=true
+ */
+router.get('/system/logs/tail', systemController.getLogTail);
+
+/**
+ * GET /api/v1/admin/system/update-check
+ * Central manifest vs local version (host UPDATE_MANIFEST_URL)
+ */
+router.get('/system/update-check', systemController.getUpdateCheck);
 
 /**
  * GET /api/v1/admin/database/stats
@@ -47,7 +71,7 @@ router.get('/database/stats', async (req, res) => {
  * GET /api/v1/admin/database/users
  * Get all users with pagination
  */
-router.get('/database/users', async (req, res) => {
+router.get('/database/users', requireAccountPermission('can_manage_users'), async (req, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
@@ -145,7 +169,7 @@ router.get('/database/appointments', async (req, res) => {
  * GET /api/v1/admin/database/doctors
  * Get all doctors with details
  */
-router.get('/database/doctors', async (req, res) => {
+router.get('/database/doctors', requireAccountPermission('can_manage_doctors'), async (req, res) => {
   try {
     const doctors = await db('doctors')
       .select(
@@ -207,7 +231,7 @@ router.get('/database/patients', async (req, res) => {
  * DELETE /api/v1/admin/database/users/:id
  * Delete a user (with safety checks)
  */
-router.delete('/database/users/:id', async (req, res) => {
+router.delete('/database/users/:id', requireAccountPermission('can_manage_users'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const currentUser = (req as any).user;
@@ -299,20 +323,39 @@ router.get('/activity-logs', async (req, res) => {
 /**
  * Permissions routes
  */
-import { PermissionsController } from '../controllers/permissions.controller';
-const permissionsController = new PermissionsController();
-
 /**
  * GET /api/v1/admin/permissions
  * Get system permissions
  */
-router.get('/permissions', permissionsController.getPermissions);
+router.get('/permissions', requireAccountPermission('can_manage_permissions'), permissionsController.getPermissions);
 
 /**
  * PUT /api/v1/admin/permissions
  * Update system permissions
  */
-router.put('/permissions', permissionsController.updatePermissions);
+router.put(
+  '/permissions',
+  authorize('developer'),
+  requireAccountPermission('can_manage_permissions'),
+  permissionsController.updatePermissions
+);
+router.get('/permissions/accounts', requireAccountPermission('can_manage_permissions'), permissionsController.listAccountPermissions);
+router.put('/permissions/accounts/:userId', requireAccountPermission('can_manage_permissions'), permissionsController.upsertAccountPermissions);
+
+/**
+ * Self-registered doctors awaiting admin/developer approval
+ */
+router.get(
+  '/registrations/pending-doctors',
+  requireAccountPermission('can_manage_doctors'),
+  pendingDoctorController.listPending
+);
+router.post(
+  '/registrations/pending-doctors/:userId/approve',
+  validateUUID('userId'),
+  requireAccountPermission('can_manage_doctors'),
+  pendingDoctorController.approve
+);
 
 export default router;
 

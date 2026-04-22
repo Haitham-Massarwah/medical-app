@@ -6,6 +6,7 @@ import { generateToken, generateRefreshToken } from '../middleware/auth.middlewa
 import db from '../config/database';
 import { logger } from '../config/logger';
 import { sendEmail } from '../services/email.service';
+import { resetPasswordByToken } from '../services/passwordReset.service';
 
 export class AuthController {
   /**
@@ -26,8 +27,19 @@ export class AuthController {
       card_holder_name,
       expiry_date,
       cvv,
-      id_number: _id_number,
+      id_number,
+      medical_license_number,
     } = req.body;
+    const normalizedIdNumber = String(id_number || '').trim();
+    const normalizedDoctorBusinessId = normalizedIdNumber.replace(/[^\d]/g, '');
+    const normalizedMedicalLicense = String(medical_license_number || '').trim();
+
+    if (role === 'doctor') {
+      if (!/^\d{5,9}$/.test(normalizedDoctorBusinessId)) {
+        throw new ValidationError('Doctor/Therapist business identifier must be 5-9 digits');
+      }
+    }
+
 
     // Allow patient and doctor self-registration (both require admin approval)
     if (!['patient', 'doctor'].includes(role)) {
@@ -110,6 +122,20 @@ export class AuthController {
       ...(hasIsActive ? { is_active: false } : {}),
       created_at: new Date(),
       updated_at: new Date(),
+      metadata: {
+        creation_source: 'self_service',
+        id_number: normalizedIdNumber,
+        ...(role === 'doctor'
+          ? {
+              doctor_business_file_id: normalizedDoctorBusinessId,
+              medical_license_number: normalizedMedicalLicense || null,
+              doctor_primary_identifier:
+                normalizedMedicalLicense || normalizedDoctorBusinessId,
+              doctor_primary_identifier_type:
+                normalizedMedicalLicense ? 'medical_license' : 'business_file_id',
+            }
+          : {}),
+      },
     };
 
     // Only add email verification fields if columns exist
@@ -151,10 +177,20 @@ export class AuthController {
       }
     } else if (role === 'doctor' && effectiveTenantId) {
       try {
+        const primaryIdentifierValue =
+          normalizedMedicalLicense || normalizedDoctorBusinessId;
+        const primaryIdentifierType = normalizedMedicalLicense
+          ? 'medical_license'
+          : 'business_file_id';
+
         await db('doctors').insert({
           user_id: user.id,
           tenant_id: effectiveTenantId,
           specialty: 'General',
+          license_number: normalizedMedicalLicense || null,
+          business_file_id: normalizedDoctorBusinessId,
+          primary_identifier_type: primaryIdentifierType,
+          primary_identifier_value: primaryIdentifierValue,
           is_active: false, // Pending admin approval
           created_at: new Date(),
           updated_at: new Date(),
@@ -221,23 +257,6 @@ export class AuthController {
       // Don't fail registration if notification fails
     }
 
-    // Generate tokens
-    const accessToken = generateToken({
-      id: user.id,
-      userId: user.id,
-      tenantId: user.tenant_id,
-      role: user.role,
-      email: user.email,
-    });
-
-    const refreshToken = generateRefreshToken({
-      id: user.id,
-      userId: user.id,
-      tenantId: user.tenant_id,
-      role: user.role,
-      email: user.email,
-    });
-
     // Remove sensitive data
     const {
       password_hash: _password_hash,
@@ -249,13 +268,10 @@ export class AuthController {
 
     res.status(201).json({
       status: 'success',
-      message: 'Registration successful. Please check your email to verify your account.',
+      message:
+        'Registration successful. Please verify your email, then wait for admin approval before login.',
       data: {
         user: userResponse,
-        tokens: {
-          accessToken,
-          refreshToken,
-        },
       },
     });
   });
@@ -268,9 +284,13 @@ export class AuthController {
     const { email, password } = req.body;
     const normalizedEmail = (email || '').toLowerCase().trim();
 
-    // Find user
+    // Find user (prefer developer/admin if duplicate rows share the same email case-insensitively)
     const user = await db('users')
       .whereRaw('LOWER(email) = ?', [normalizedEmail])
+      .orderByRaw(
+        `CASE role WHEN 'developer' THEN 0 WHEN 'admin' THEN 1 WHEN 'doctor' THEN 2 WHEN 'patient' THEN 3 ELSE 4 END`
+      )
+      .orderBy('id', 'asc')
       .first();
 
     if (!user) {
@@ -282,6 +302,14 @@ export class AuthController {
 
     if (!isPasswordValid) {
       throw new AuthenticationError('Invalid email or password');
+    }
+
+    if (user.is_email_verified === false) {
+      throw new AuthenticationError('Please verify your email before logging in');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(user, 'is_active') && user.is_active === false) {
+      throw new AuthenticationError('Your account is pending admin approval');
     }
 
     // Update last login
@@ -414,7 +442,7 @@ export class AuthController {
         template: 'password-reset',
         data: {
           name: user.first_name,
-          resetUrl: `${process.env.FRONTEND_URL}/reset-password/${resetToken}`,
+          resetUrl: `${process.env.BASE_URL || 'http://localhost:3000'}/api/v1/auth/reset-password-page/${resetToken}`,
         },
       });
     } catch (error) {
@@ -437,32 +465,26 @@ export class AuthController {
    */
   resetPassword = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { token } = req.params;
-    const { password } = req.body;
+    const password = (req.body?.password ?? req.body?.newPassword) as string | undefined;
+    await resetPasswordByToken(token, password ?? '');
 
-    // Find user with valid token
-    const user = await db('users')
-      .where({ password_reset_token: token })
-      .andWhere('password_reset_expiry', '>', new Date())
-      .first();
+    res.status(200).json({
+      status: 'success',
+      message: 'Password reset successful. You can now login with your new password.',
+    });
+  });
 
-    if (!user) {
-      throw new ValidationError('Invalid or expired reset token');
+  /**
+   * Reset password (token in JSON body — for clients that cannot put token in path)
+   * POST /api/v1/auth/reset-password
+   */
+  resetPasswordBody = asyncHandler(async (req: Request, res: Response, _next: NextFunction) => {
+    const token = String(req.body?.token ?? '').trim();
+    const password = (req.body?.password ?? req.body?.newPassword) as string | undefined;
+    if (!token) {
+      throw new ValidationError('Reset token is required');
     }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Update password and clear reset token
-    await db('users')
-      .where({ id: user.id })
-      .update({
-        password_hash: hashedPassword,
-        password_reset_token: null,
-        password_reset_expiry: null,
-        updated_at: new Date(),
-      });
-
-    logger.info(`Password reset successful for user: ${user.id}`);
+    await resetPasswordByToken(token, password ?? '');
 
     res.status(200).json({
       status: 'success',
@@ -487,20 +509,30 @@ export class AuthController {
       throw new ValidationError('Invalid or expired verification token');
     }
 
+    const metadata = (user.metadata || {}) as Record<string, any>;
+    const requiresAdminApproval = metadata.require_admin_approval !== false;
+    const updatePayload: Record<string, any> = {
+      is_email_verified: true,
+      email_verification_token: null,
+      email_verification_expiry: null,
+      updated_at: new Date(),
+      metadata: {
+        ...metadata,
+        pending_email_verification: false,
+      },
+    };
+    if (!requiresAdminApproval && Object.prototype.hasOwnProperty.call(user, 'is_active')) {
+      updatePayload.is_active = true;
+    }
+
     // Update email verification status
-    await db('users')
-      .where({ id: user.id })
-      .update({
-        is_email_verified: true,
-        email_verification_token: null,
-        email_verification_expiry: null,
-        updated_at: new Date(),
-      });
+    await db('users').where({ id: user.id }).update(updatePayload);
 
     logger.info(`Email verified for user: ${user.id}`);
 
-    // Send admin notification for approval (for both patient and doctor)
-    try {
+    // Send admin notification for approval only when required.
+    if (requiresAdminApproval) {
+      try {
       // Get all admin and developer users
       const admins = await db('users')
         .whereIn('role', ['admin', 'developer'])
@@ -555,15 +587,18 @@ export class AuthController {
         }
       }
 
-      logger.info(`Admin notifications sent for user approval: ${user.id}`);
-    } catch (error) {
-      logger.error('Failed to send admin notifications:', error);
-      // Don't fail email verification if notification fails
+        logger.info(`Admin notifications sent for user approval: ${user.id}`);
+      } catch (error) {
+        logger.error('Failed to send admin notifications:', error);
+        // Don't fail email verification if notification fails
+      }
     }
 
     res.status(200).json({
       status: 'success',
-      message: 'Email verified successfully. Your account is pending admin approval.',
+      message: requiresAdminApproval
+        ? 'Email verified successfully. Your account is pending admin approval.'
+        : 'Email verified successfully. Your account is now active.',
     });
   });
 

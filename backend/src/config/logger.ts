@@ -1,8 +1,36 @@
 import winston from 'winston';
 import path from 'path';
+import fs from 'fs';
 
 const logLevel = process.env.LOG_LEVEL || 'info';
 const logFile = process.env.LOG_FILE || 'logs/app.log';
+
+const logsDir = path.join(process.cwd(), 'logs');
+const errorLogPath = path.join(logsDir, 'error.log');
+const appLogPath = path.isAbsolute(logFile) ? logFile : path.join(process.cwd(), logFile);
+
+export function getLogFilePaths(): { logsDir: string; appLog: string; errorLog: string } {
+  return {
+    logsDir,
+    appLog: appLogPath,
+    errorLog: errorLogPath,
+  };
+}
+
+let cachedPackageVersion: string | null = null;
+
+export function getAppPackageVersion(): string {
+  if (cachedPackageVersion) return cachedPackageVersion;
+  try {
+    const pkgPath = path.join(process.cwd(), 'package.json');
+    const raw = fs.readFileSync(pkgPath, 'utf8');
+    const pkg = JSON.parse(raw) as { version?: string };
+    cachedPackageVersion = pkg.version || 'unknown';
+  } catch {
+    cachedPackageVersion = 'unknown';
+  }
+  return cachedPackageVersion;
+}
 
 // Define log format
 const logFormat = winston.format.combine(
@@ -31,31 +59,21 @@ export const logger = winston.createLogger({
   format: logFormat,
   defaultMeta: { service: 'medical-appointment-api' },
   transports: [
-    // Write all logs to console
     new winston.transports.Console({
       format: consoleFormat,
     }),
-    // Write all logs with level 'error' and below to error.log
     new winston.transports.File({
-      filename: path.join(process.cwd(), 'logs', 'error.log'),
+      filename: errorLogPath,
       level: 'error',
       maxsize: 5242880, // 5MB
       maxFiles: 5,
     }),
-    // Write all logs to combined log
     new winston.transports.File({
-      filename: path.join(process.cwd(), logFile),
+      filename: appLogPath,
       maxsize: 5242880, // 5MB
       maxFiles: 5,
     }),
   ],
 });
-
-// If we're not in production, log to the console with the format above
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: consoleFormat,
-  }));
-}
 
 export default logger;

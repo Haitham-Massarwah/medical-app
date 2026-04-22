@@ -1,13 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
-import { ValidationError } from '../utils/apiError';
+import { ValidationError } from './errorHandler';
 
 // Generic validation middleware for express-validator
 export const validateRequest = (req: Request, _res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    const errorMessages = errors.array().map((error: any) => error.msg).join(', ');
-    return next(new ValidationError(errorMessages));
+    const details = errors.array().map((error: any) => {
+      const field = error.type === 'field' ? error.path : 'validation';
+      return { field, error: String(error.msg) };
+    });
+    return next(new ValidationError('Validation failed', details));
   }
   next();
 };

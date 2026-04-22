@@ -47,6 +47,7 @@ windows/flutter/generated_plugins.cmake
 .env
 .env.local
 .env.production
+.env.production.local
 *.env
 
 # Logs
@@ -98,3 +99,9 @@ test/.test_coverage.dart
 *CREDENTIALS*.txt
 *PASSWORDS*.txt
 
+# Personal / local only (not part of repo deliverables)
+Docs/AutoRecovery save of Medical Appointments - Accounts and Passwords.docx
+
+# Local installers (do not commit)
+Codex.dmg
+*.dmg

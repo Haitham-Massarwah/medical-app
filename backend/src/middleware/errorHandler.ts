@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
+import { ApiError as UtilsApiError } from '../utils/apiError';
 
 /**
  * Custom Application Error class
@@ -25,8 +26,10 @@ export class AppError extends Error {
  * Validation Error - 400
  */
 export class ValidationError extends AppError {
-  constructor(message: string) {
+  details?: Array<{ field: string; error: string }>;
+  constructor(message: string, details?: Array<{ field: string; error: string }>) {
     super(message, 400, 'VALIDATION_ERROR');
+    this.details = details;
   }
 }
 
@@ -85,6 +88,21 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ) => {
+  // Legacy ApiError from utils (used by appointment.service, payment, etc.)
+  if (err instanceof UtilsApiError) {
+    logger.error(
+      `${err.statusCode} - ${err.message} - ${req.originalUrl} - ${req.method}`,
+      { details: err.details, userId: (req as any).user?.userId },
+    );
+    res.status(err.statusCode).json({
+      status: 'error',
+      code: 'API_ERROR',
+      message: err.message,
+      ...(err.details ? { details: err.details } : {}),
+    });
+    return;
+  }
+
   // Default to 500 server error
   let statusCode = 500;
   let message = 'Internal server error';
@@ -134,6 +152,7 @@ export const errorHandler = (
     status: 'error',
     code,
     message,
+    ...(err instanceof ValidationError && err.details ? { details: err.details } : {}),
     ...(process.env.NODE_ENV === 'development' && {
       stack: err.stack,
       error: err,

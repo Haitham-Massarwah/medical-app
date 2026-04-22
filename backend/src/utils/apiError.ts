@@ -1,10 +1,19 @@
 export class ApiError extends Error {
   public statusCode: number;
   public isOperational: boolean;
+  /** Structured payload for clients (e.g. overbooking diagnostics). */
+  public details?: Record<string, unknown>;
 
-  constructor(statusCode: number, message: string, isOperational = true, stack = '') {
+  constructor(
+    statusCode: number,
+    message: string,
+    details?: Record<string, unknown>,
+    isOperational = true,
+    stack = '',
+  ) {
     super(message);
     this.statusCode = statusCode;
+    this.details = details;
     this.isOperational = isOperational;
     if (stack) {
       this.stack = stack;

@@ -10,11 +10,14 @@ export const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
-    const errorMessages = errors.array().map(error => {
-      return `${error.type === 'field' ? (error as any).path : 'validation'}: ${error.msg}`;
+    const details = errors.array().map(error => {
+      const field = error.type === 'field' ? (error as any).path : 'validation';
+      return {
+        field,
+        error: String(error.msg),
+      };
     });
-
-    throw new ValidationError(errorMessages.join(', '));
+    throw new ValidationError('Validation failed', details);
   }
 
   next();
@@ -33,12 +36,14 @@ export const validateRequest = (validations: ValidationChain[]) => {
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
-      const errorMessages = errors.array().map(error => {
+      const details = errors.array().map(error => {
         const field = error.type === 'field' ? (error as any).path : 'validation';
-        return `${field}: ${error.msg}`;
+        return {
+          field,
+          error: String(error.msg),
+        };
       });
-
-      return next(new ValidationError(errorMessages.join(', ')));
+      return next(new ValidationError('Validation failed', details));
     }
 
     next();
@@ -127,6 +132,27 @@ export const validateUUID = (paramName: string) => {
 
     next();
   };
+};
+
+/**
+ * Israeli ID (Teudat Zehut) validator
+ * Accepts 5-9 digits and validates checksum after left-padding to 9 digits.
+ */
+export const isValidIsraeliId = (id: string): boolean => {
+  if (!id) return false;
+  const digitsOnly = id.replace(/\D/g, '');
+  if (digitsOnly.length < 5 || digitsOnly.length > 9) return false;
+
+  const normalized = digitsOnly.padStart(9, '0');
+  let sum = 0;
+
+  for (let i = 0; i < normalized.length; i++) {
+    let num = Number(normalized[i]) * ((i % 2) + 1);
+    if (num > 9) num -= 9;
+    sum += num;
+  }
+
+  return sum % 10 === 0;
 };
 
 

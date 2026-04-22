@@ -75,6 +75,71 @@ export class AnalyticsController {
   });
 
   /**
+   * Dashboard user activity (audit_events + light signup stats).
+   * GET /api/v1/analytics/dashboard-activity
+   */
+  getDashboardActivity = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const tenantId = req.tenantId!;
+    const hasAuditEvents = await db.schema.hasTable('audit_events');
+
+    let recent_events: any[] = [];
+    let audit_events_last_24h = 0;
+    let distinct_actor_users_7d = 0;
+
+    if (hasAuditEvents) {
+      recent_events = await db('audit_events')
+        .leftJoin('users', 'audit_events.actor_user_id', 'users.id')
+        .where('audit_events.tenant_id', tenantId)
+        .select(
+          'audit_events.created_at',
+          'audit_events.action',
+          'audit_events.entity_type',
+          'audit_events.summary',
+          db.raw(
+            "TRIM(CONCAT(COALESCE(users.first_name,''),' ',COALESCE(users.last_name,''))) as actor_name",
+          ),
+          'users.email as actor_email',
+        )
+        .orderBy('audit_events.created_at', 'desc')
+        .limit(25);
+
+      const c24 = await db('audit_events')
+        .where({ tenant_id: tenantId })
+        .andWhere('created_at', '>=', db.raw("NOW() - INTERVAL '24 hours'"))
+        .count('* as c')
+        .first();
+      audit_events_last_24h = Number((c24 as { c?: string | number })?.c ?? 0);
+
+      const d7 = await db('audit_events')
+        .where({ tenant_id: tenantId })
+        .andWhere('created_at', '>=', db.raw("NOW() - INTERVAL '7 days'"))
+        .whereNotNull('actor_user_id')
+        .countDistinct({ actor_user_id: 'c' })
+        .first();
+      distinct_actor_users_7d = Number((d7 as { c?: string | number })?.c ?? 0);
+    }
+
+    const newUsersRow = await db('users')
+      .where({ tenant_id: tenantId })
+      .andWhere('created_at', '>=', db.raw("NOW() - INTERVAL '7 days'"))
+      .count('* as c')
+      .first();
+    const new_users_7d = Number((newUsersRow as { c?: string | number })?.c ?? 0);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        stats: {
+          audit_events_last_24h,
+          distinct_actor_users_7d,
+          new_users_7d,
+        },
+        recent_events,
+      },
+    });
+  });
+
+  /**
    * Admin health summary: integrations + recent audit trail.
    * GET /api/v1/analytics/admin-health
    */
@@ -538,6 +603,247 @@ export class AnalyticsController {
         year: currentYear,
         appointments,
         revenue,
+      },
+    });
+  });
+
+  /**
+   * Combined advanced analytics: revenue, appointments, doctor performance.
+   * GET /api/v1/analytics/advanced?start_date=&end_date=
+   */
+  getAdvancedAnalytics = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const tenantId = req.tenantId!;
+    const role = req.user?.role || '';
+    const userId = req.user?.userId || req.user?.id;
+    const start_date = req.query.start_date as string | undefined;
+    const end_date = req.query.end_date as string | undefined;
+    const scopedDoctorIdFromQuery = req.query.doctor_id as string | undefined;
+
+    let scopedDoctorId: string | null = null;
+    if (role === 'doctor') {
+      const doctor = await db('doctors')
+        .where({ tenant_id: tenantId, user_id: userId, is_active: true })
+        .first('id');
+      scopedDoctorId = doctor?.id ?? null;
+    } else if (role === 'admin' || role === 'developer') {
+      scopedDoctorId = scopedDoctorIdFromQuery || null;
+    }
+
+    let apptQ = db('appointments').where({ tenant_id: tenantId });
+    if (scopedDoctorId) {
+      apptQ = apptQ.andWhere('doctor_id', scopedDoctorId);
+    }
+    if (start_date) {
+      apptQ = apptQ.andWhere('appointment_date', '>=', start_date);
+    }
+    if (end_date) {
+      apptQ = apptQ.andWhere('appointment_date', '<=', end_date);
+    }
+
+    const appointments_by_status = await apptQ
+      .clone()
+      .select('status')
+      .count('* as count')
+      .groupBy('status');
+
+    const appointments_by_date = await apptQ
+      .clone()
+      .select(db.raw('DATE(appointment_date) as date'))
+      .count('* as count')
+      .groupBy(db.raw('DATE(appointment_date)'))
+      .orderBy('date', 'desc')
+      .limit(30);
+
+    let revenue: Record<string, unknown> = {
+      totals: { total_revenue: 0, total_transactions: 0 },
+      by_date: [],
+    };
+
+    if (await this._hasPaymentsTable()) {
+      try {
+        let payQ = db('payments as p')
+          .leftJoin('appointments as a', 'p.appointment_id', 'a.id')
+          .where({ 'p.tenant_id': tenantId, 'p.status': 'succeeded' });
+        if (scopedDoctorId) {
+          payQ = payQ.andWhere('a.doctor_id', scopedDoctorId);
+        }
+        if (start_date) {
+          payQ = payQ.andWhere('p.created_at', '>=', start_date);
+        }
+        if (end_date) {
+          payQ = payQ.andWhere('p.created_at', '<=', end_date);
+        }
+        const totals = await payQ
+          .clone()
+          .select(
+            db.raw('COALESCE(SUM(p.amount),0) as total_revenue'),
+            db.raw('COUNT(*)::int as total_transactions'),
+          )
+          .first();
+        const byDate = await payQ
+          .clone()
+          .select(db.raw('DATE(p.created_at) as date'))
+          .sum('p.amount as revenue')
+          .count('* as transactions')
+          .groupBy(db.raw('DATE(p.created_at)'))
+          .orderBy('date', 'desc')
+          .limit(30);
+        const byDoctor = await payQ
+          .clone()
+          .join('doctors as d', 'a.doctor_id', 'd.id')
+          .join('users as u', 'd.user_id', 'u.id')
+          .select(
+            'd.id as doctor_id',
+            'u.first_name',
+            'u.last_name',
+            db.raw('COALESCE(SUM(p.amount),0) as revenue'),
+            db.raw('COUNT(*)::int as transactions'),
+          )
+          .groupBy('d.id', 'u.first_name', 'u.last_name')
+          .orderBy('revenue', 'desc');
+        revenue = { totals: totals || {}, by_date: byDate, by_doctor: byDoctor };
+      } catch (e) {
+        logger.warn('Advanced analytics revenue block failed', e as any);
+      }
+    }
+
+    const doctors = await db('doctors')
+      .join('users', 'doctors.user_id', 'users.id')
+      .leftJoin('appointments', 'doctors.id', 'appointments.doctor_id')
+      .where({ 'doctors.tenant_id': tenantId })
+      .where('doctors.is_active', true)
+      .select(
+        'doctors.id',
+        'users.first_name',
+        'users.last_name',
+        db.raw('COUNT(appointments.id) as total_appointments'),
+        db.raw(
+          "COUNT(appointments.id) FILTER (WHERE appointments.status = 'completed') as completed_appointments",
+        ),
+        db.raw(
+          "COUNT(appointments.id) FILTER (WHERE appointments.status = 'cancelled') as cancelled_appointments",
+        ),
+      )
+      .groupBy('doctors.id', 'users.first_name', 'users.last_name')
+      .orderBy('total_appointments', 'desc');
+
+    // Workload distribution by weekday.
+    const workload_by_weekday = await apptQ
+      .clone()
+      .select(db.raw("EXTRACT(DOW FROM appointment_date)::int as day_of_week"))
+      .count('* as appointments')
+      .groupBy(db.raw('EXTRACT(DOW FROM appointment_date)::int'))
+      .orderBy('day_of_week', 'asc');
+
+    // Cancellation analysis (rate + reasons + by day).
+    const cancellationTotals = await apptQ
+      .clone()
+      .select(
+        db.raw('COUNT(*)::int as total'),
+        db.raw("COUNT(*) FILTER (WHERE status = 'cancelled')::int as cancelled"),
+      )
+      .first();
+    const cancellation_by_reason = await apptQ
+      .clone()
+      .where('status', 'cancelled')
+      .select(db.raw("COALESCE(NULLIF(TRIM(cancellation_reason), ''), 'unspecified') as reason"))
+      .count('* as count')
+      .groupBy(db.raw("COALESCE(NULLIF(TRIM(cancellation_reason), ''), 'unspecified')"))
+      .orderBy('count', 'desc')
+      .limit(10);
+    const cancellation_by_day = await apptQ
+      .clone()
+      .where('status', 'cancelled')
+      .select(db.raw('DATE(appointment_date) as date'))
+      .count('* as count')
+      .groupBy(db.raw('DATE(appointment_date)'))
+      .orderBy('date', 'desc')
+      .limit(30);
+    const totalAppointments = Number((cancellationTotals as any)?.total || 0);
+    const totalCancelled = Number((cancellationTotals as any)?.cancelled || 0);
+    const cancellation_analysis = {
+      total_appointments: totalAppointments,
+      total_cancelled: totalCancelled,
+      cancellation_rate_pct:
+        totalAppointments > 0 ? Number(((totalCancelled / totalAppointments) * 100).toFixed(2)) : 0,
+      by_reason: cancellation_by_reason,
+      by_day: cancellation_by_day,
+    };
+
+    // Lead conversion (CRM lead -> booked appointment with same phone/email in tenant).
+    let lead_conversion: Record<string, unknown> = {
+      total_leads: 0,
+      converted_leads: 0,
+      conversion_rate_pct: 0,
+    };
+    const hasCrmLeads = await db.schema.hasTable('crm_leads');
+    if (hasCrmLeads) {
+      let leadsQ = db('crm_leads as l').where('l.tenant_id', tenantId);
+      if (scopedDoctorId) {
+        leadsQ = leadsQ.andWhere('l.owner_user_id', userId || '');
+      }
+      if (start_date) {
+        leadsQ = leadsQ.andWhere('l.created_at', '>=', start_date);
+      }
+      if (end_date) {
+        leadsQ = leadsQ.andWhere('l.created_at', '<=', end_date);
+      }
+      const convertedExistsSql = scopedDoctorId
+        ? `
+            EXISTS (
+              SELECT 1
+              FROM patients p
+              JOIN appointments a ON a.patient_id = p.id AND a.tenant_id = l.tenant_id
+              WHERE p.tenant_id = l.tenant_id
+                AND (LOWER(COALESCE(p.phone,'')) = LOWER(COALESCE(l.phone,'')) OR LOWER(COALESCE(p.email,'')) = LOWER(COALESCE(l.email,'')))
+                AND a.doctor_id = ?
+            )
+          `
+        : `
+            EXISTS (
+              SELECT 1
+              FROM patients p
+              JOIN appointments a ON a.patient_id = p.id AND a.tenant_id = l.tenant_id
+              WHERE p.tenant_id = l.tenant_id
+                AND (LOWER(COALESCE(p.phone,'')) = LOWER(COALESCE(l.phone,'')) OR LOWER(COALESCE(p.email,'')) = LOWER(COALESCE(l.email,'')))
+            )
+          `;
+      const leadStats = await leadsQ
+        .clone()
+        .select(
+          db.raw('COUNT(DISTINCT l.id)::int as total_leads'),
+          db.raw(
+            `COUNT(DISTINCT CASE WHEN ${convertedExistsSql} THEN l.id END)::int as converted_leads`,
+            scopedDoctorId ? [scopedDoctorId] : [],
+          ),
+        )
+        .first();
+      const totalLeads = Number((leadStats as any)?.total_leads || 0);
+      const convertedLeads = Number((leadStats as any)?.converted_leads || 0);
+      lead_conversion = {
+        total_leads: totalLeads,
+        converted_leads: convertedLeads,
+        conversion_rate_pct: totalLeads > 0 ? Number(((convertedLeads / totalLeads) * 100).toFixed(2)) : 0,
+      };
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        scope: {
+          tenant_id: tenantId,
+          role,
+          scoped_doctor_id: scopedDoctorId,
+          start_date: start_date || null,
+          end_date: end_date || null,
+        },
+        appointments_by_status,
+        appointments_by_date,
+        revenue,
+        doctors,
+        workload_by_weekday,
+        cancellation_analysis,
+        lead_conversion,
       },
     });
   });

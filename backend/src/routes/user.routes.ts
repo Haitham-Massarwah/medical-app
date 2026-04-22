@@ -3,7 +3,12 @@ import { body } from 'express-validator';
 import { UserController } from '../controllers/user.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validateRequest, validatePagination, validateUUID } from '../middleware/validator';
+import { bodyOptionalLoosePhone } from '../middleware/phoneValidation';
 import { tenantContext } from '../middleware/tenantContext';
+import {
+  getMessagingPreference,
+  setMessagingPreference,
+} from '../controllers/messagingPreference.controller';
 
 const router = Router();
 const userController = new UserController();
@@ -11,6 +16,21 @@ const userController = new UserController();
 // All routes require authentication
 router.use(authenticate);
 router.use(tenantContext);
+
+/**
+ * @route   GET /api/v1/users/me/messaging-preference
+ * @desc    Get the authenticated user's preferred notification channel.
+ * @access  Private (any authenticated user)
+ */
+router.get('/me/messaging-preference', getMessagingPreference);
+
+/**
+ * @route   PUT /api/v1/users/me/messaging-preference
+ * @desc    Update the authenticated user's preferred notification channel.
+ * @body    { preference: "default" | "whatsapp" | "telegram" | "both" | "none" }
+ * @access  Private (any authenticated user)
+ */
+router.put('/me/messaging-preference', setMessagingPreference);
 
 /**
  * @route   GET /api/v1/users
@@ -26,21 +46,47 @@ router.get(
 
 /**
  * @route   POST /api/v1/users
- * @desc    Create staff user (receptionist)
+ * @desc    Create privileged user (admin, doctor, patient)
  * @access  Private/Admin/Developer
  */
 router.post(
   '/',
-  authorize('admin', 'developer'),
+  authorize('doctor', 'admin', 'developer'),
   validateRequest([
-    body('email').isEmail().normalizeEmail(),
+    body('email')
+      .isEmail()
+      .normalizeEmail({ gmail_remove_dots: false }),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
     body('first_name').trim().notEmpty(),
     body('last_name').trim().notEmpty(),
-    body('phone').optional().isMobilePhone('any'),
-    body('role').equals('receptionist').withMessage('role must be receptionist'),
+    bodyOptionalLoosePhone(),
+    body('role').isIn(['patient', 'doctor', 'admin']).withMessage('role must be patient, doctor, or admin'),
+    body('business_file_id').optional({ nullable: true }).isString(),
+    body('specialty').optional({ nullable: true }).isString(),
+    body('languages').optional({ nullable: true }).isArray(),
+    body('bio').optional({ nullable: true }).isString(),
+    body('license_number').optional({ nullable: true }).isString(),
+    body('pre_approved').optional({ nullable: true }).isBoolean(),
+    body('id_number').optional({ nullable: true }).isString(),
+    body('city').optional({ nullable: true }).isString(),
+    body('app_payments_enabled').optional({ nullable: true }).isBoolean(),
+    body('bank_details_enabled').optional({ nullable: true }).isBoolean(),
+    body('discount_percentage').optional({ nullable: true }).isFloat({ min: 0, max: 100 }),
+    body('plan_months').optional({ nullable: true }).isInt({ min: 1, max: 60 }),
   ]),
   userController.createStaffUser
+);
+
+/**
+ * @route   POST /api/v1/users/:id/resend-setup-email
+ * @desc    Resend setup password email for a user
+ * @access  Private/Admin/Developer
+ */
+router.post(
+  '/:id/resend-setup-email',
+  authorize('admin', 'developer'),
+  validateUUID('id'),
+  userController.resendSetupEmail
 );
 
 /**
@@ -65,8 +111,11 @@ router.put(
   validateRequest([
     body('first_name').optional().trim().notEmpty(),
     body('last_name').optional().trim().notEmpty(),
-    body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().isMobilePhone('any'),
+    body('email')
+      .optional()
+      .isEmail()
+      .normalizeEmail({ gmail_remove_dots: false }),
+    bodyOptionalLoosePhone(),
     body('date_of_birth').optional().isISO8601(),
     body('gender').optional().isIn(['male', 'female', 'other']),
     body('address').optional().trim(),
@@ -102,7 +151,7 @@ router.put(
   validateUUID('id'),
   validateRequest([
     body('role')
-      .isIn(['patient', 'doctor', 'admin', 'developer', 'receptionist'])
+      .isIn(['patient', 'doctor', 'admin', 'developer'])
       .withMessage('Invalid role'),
   ]),
   userController.updateUserRole

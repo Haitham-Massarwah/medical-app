@@ -155,21 +155,37 @@ router.use(authenticate);
  */
 router.get('/google/auth-url', (req, res) => {
   try {
-    // TODO: Implement actual Google OAuth flow
-    // For now, return a placeholder
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      return res.status(400).json({
+        success: false,
+        error: 'Google client ID is not configured',
+      });
+    }
+    const googleRedirect =
+      process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/v1/calendar/google/callback';
+    // Always prefer the authenticated user email; do not force a system mailbox.
+    const loggedInEmail =
+      typeof req.user?.email === 'string' && req.user.email.trim().length > 0
+        ? req.user.email.trim()
+        : '';
+    const googleHint = loggedInEmail
+      ? `&login_hint=${encodeURIComponent(loggedInEmail)}`
+      : '';
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
       `client_id=${process.env.GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID'}` +
-      `&redirect_uri=${process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/v1/calendar/google/callback'}` +
+      `&redirect_uri=${encodeURIComponent(googleRedirect)}` +
       `&response_type=code` +
       `&scope=https://www.googleapis.com/auth/calendar` +
       `&access_type=offline` +
-      `&state=${req.user?.id}`;
+      `&state=${req.user?.userId || req.user?.id || ''}` +
+      `&prompt=select_account` +
+      googleHint;
 
     res.json({
       success: true,
       data: {
         authUrl,
-        message: 'Redirect user to this URL for Google Calendar authorization'
+        message: 'Redirect user to this URL for Google Calendar authorization',
       }
     });
   } catch (error) {
@@ -189,12 +205,19 @@ router.get('/outlook/auth-url', (req, res) => {
   try {
     // TODO: Implement actual Microsoft OAuth flow
     // For now, return a placeholder
+    const outlookRedirect =
+      process.env.OUTLOOK_REDIRECT_URI ||
+      'http://localhost:3000/api/v1/calendar/outlook/callback';
+    const outlookHint = process.env.OUTLOOK_LOGIN_HINT
+      ? `&login_hint=${encodeURIComponent(process.env.OUTLOOK_LOGIN_HINT)}`
+      : '';
     const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
       `client_id=${process.env.OUTLOOK_CLIENT_ID || 'YOUR_OUTLOOK_CLIENT_ID'}` +
       `&response_type=code` +
-      `&redirect_uri=${process.env.OUTLOOK_REDIRECT_URI || 'http://localhost:3000/api/v1/calendar/outlook/callback'}` +
-      `&scope=https://graph.microsoft.com/Calendars.ReadWrite` +
-      `&state=${req.user?.id}`;
+      `&redirect_uri=${encodeURIComponent(outlookRedirect)}` +
+      `&scope=${encodeURIComponent('https://graph.microsoft.com/Calendars.ReadWrite')}` +
+      `&state=${req.user?.id}` +
+      outlookHint;
 
     res.json({
       success: true,
@@ -219,7 +242,7 @@ router.get('/outlook/auth-url', (req, res) => {
 router.post('/disconnect', async (req, res) => {
   try {
     const { provider } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?.userId || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -256,7 +279,7 @@ router.post('/disconnect', async (req, res) => {
  */
 router.get('/status', async (req, res) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({

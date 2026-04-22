@@ -3,6 +3,23 @@ import redis from '../config/redis';
 import { logger } from '../config/logger';
 import { ApiError } from '../utils/apiError';
 import { addMinutes, format, isAfter, isBefore } from 'date-fns';
+import { fireGoogleCalendarSync } from './appointmentGoogleCalendarSync.service';
+import { noShowOverbookingService } from './noShowOverbooking.service';
+import { appointmentSmsAutomationService } from './appointmentSmsAutomation.service';
+import { noShowPredictionService } from './noShowPrediction.service';
+
+export type BookAppointmentMeta = {
+  overbooked: boolean;
+  overbooking?: {
+    reason: string;
+    risk_score: number;
+    risk_threshold: number | null;
+    max_extra_slots: number | null;
+    current_extra_in_slot: number;
+    overlapping_appointments: number;
+    rule_enabled: boolean;
+  };
+};
 
 interface BookAppointmentParams {
   tenantId: string;
@@ -15,6 +32,15 @@ interface BookAppointmentParams {
   location?: string;
   isTelehealth: boolean;
   bookedBy: string;
+  /** JWT role of booker (for AI service / prediction scope). */
+  actorRole?: string;
+  /** Optional snapshot for non-registered bookings. */
+  guestPatient?: {
+    fullName?: string;
+    phone?: string;
+    email?: string;
+    idNumber?: string;
+  };
 }
 
 interface CheckAvailabilityParams {
@@ -39,7 +65,9 @@ export class AppointmentService {
   /**
    * Book a new appointment
    */
-  public async bookAppointment(params: BookAppointmentParams): Promise<any> {
+  public async bookAppointment(
+    params: BookAppointmentParams,
+  ): Promise<{ appointment: Record<string, unknown>; booking_meta: BookAppointmentMeta }> {
     const {
       tenantId,
       patientId,
@@ -51,9 +79,14 @@ export class AppointmentService {
       location,
       isTelehealth,
       bookedBy,
+      actorRole,
+      guestPatient,
     } = params;
 
-    return await db.transaction(async (trx) => {
+    let bookingMetaOverbooked = false;
+    let bookingMetaDetail: BookAppointmentMeta['overbooking'] | undefined;
+
+    const appointment = (await db.transaction(async (trx) => {
       try {
         // 1. Check if doctor exists and is active
         const doctor = await trx('doctors')
@@ -73,21 +106,41 @@ export class AppointmentService {
           throw new ApiError(404, 'Patient not found');
         }
 
-        // 3. Double-check availability (atomic check within transaction)
-        const isAvailable = await this.checkAvailabilityInTransaction(
+        // 3. Double-check availability (atomic + overbooking rules)
+        const slot = await this.checkAvailabilityInTransaction(
           trx,
           doctorId,
           appointmentDate,
           durationMinutes,
-          tenantId
+          tenantId,
         );
 
-        if (!isAvailable) {
-          throw new ApiError(409, 'Time slot is no longer available');
+        bookingMetaOverbooked = slot.overbooked;
+        if (slot.overbooked && slot.overbooking_detail) {
+          bookingMetaDetail = slot.overbooking_detail;
         }
 
         // 4. Create appointment
-        const [appointment] = await trx('appointments')
+        const apptColumnsRaw = await trx('information_schema.columns')
+          .where({ table_name: 'appointments' })
+          .select('column_name');
+        const apptColumns = new Set(apptColumnsRaw.map((r: any) => String(r.column_name)));
+
+        const guestPayload: Record<string, unknown> = {};
+        if (guestPatient && apptColumns.has('guest_name')) {
+          guestPayload.guest_name = guestPatient.fullName || null;
+        }
+        if (guestPatient && apptColumns.has('guest_phone')) {
+          guestPayload.guest_phone = guestPatient.phone || null;
+        }
+        if (guestPatient && apptColumns.has('guest_email')) {
+          guestPayload.guest_email = guestPatient.email || null;
+        }
+        if (guestPatient && apptColumns.has('guest_id_number')) {
+          guestPayload.guest_id_number = guestPatient.idNumber || null;
+        }
+
+        const [created] = await trx('appointments')
           .insert({
             tenant_id: tenantId,
             patient_id: patientId,
@@ -99,6 +152,7 @@ export class AppointmentService {
             notes,
             location,
             is_telehealth: isTelehealth,
+            ...guestPayload,
           })
           .returning('*');
 
@@ -108,21 +162,51 @@ export class AppointmentService {
           user_id: bookedBy,
           action: 'CREATE',
           entity_type: 'appointment',
-          entity_id: appointment.id,
-          new_values: appointment,
+          entity_id: created.id,
+          new_values: created,
           ip_address: null, // Would come from request
         });
 
         // 6. Clear cache
         await this.clearAppointmentCache(tenantId, doctorId, patientId);
 
-        logger.info(`Appointment booked successfully: ${appointment.id}`);
-        return appointment;
+        logger.info(`Appointment booked successfully: ${created.id}`);
+        return created;
       } catch (error) {
         logger.error('Error in bookAppointment transaction:', error);
         throw error;
       }
-    });
+    })) as Record<string, unknown>;
+
+    const predictionScope = {
+      tenantId,
+      role: actorRole || 'admin',
+      scopedDoctorId: null as string | null,
+      actorUserId: bookedBy,
+    };
+
+    try {
+      await noShowPredictionService.predictAppointmentNoShow(predictionScope, String(appointment.id));
+    } catch (e) {
+      logger.warn('Auto no-show prediction after booking failed', {
+        appointmentId: appointment.id,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    fireGoogleCalendarSync(appointment.id as string);
+    try {
+      await appointmentSmsAutomationService.onAppointmentBooked(String(appointment.id));
+    } catch (e) {
+      logger.warn('Post-book SMS automation failed', { error: (e as Error)?.message });
+    }
+
+    const booking_meta: BookAppointmentMeta = {
+      overbooked: bookingMetaOverbooked,
+      ...(bookingMetaDetail ? { overbooking: bookingMetaDetail } : {}),
+    };
+
+    return { appointment, booking_meta };
   }
 
   /**
@@ -183,6 +267,19 @@ export class AppointmentService {
       }
     }
 
+    const timeOffRows = await db('doctor_time_off')
+      .where({ doctor_id: doctorId, tenant_id: tenantId })
+      .select('start_date', 'end_date');
+    if (this.isDateInDoctorTimeOff(dateOnly, timeOffRows)) {
+      return false;
+    }
+    const breakRows = await db('doctor_breaks')
+      .where({ doctor_id: doctorId, tenant_id: tenantId, is_active: true })
+      .select('day_of_week', 'start_time', 'end_time');
+    if (this.breaksOverlapSlot(appointmentDate, appointmentEnd, breakRows)) {
+      return false;
+    }
+
     // 4. Check for conflicting appointments
     const conflictingAppointments = await db('appointments')
       .where({ doctor_id: doctorId, tenant_id: tenantId })
@@ -206,7 +303,20 @@ export class AppointmentService {
       });
 
     if (conflictingAppointments.length > 0) {
-      return false;
+      const ids = conflictingAppointments.map((c: { id: string }) => c.id);
+      const preds = await db('appointment_no_show_predictions')
+        .where({ tenant_id: tenantId, is_current: true })
+        .whereIn('appointment_id', ids)
+        .select('risk_score');
+      let maxRisk = 0;
+      for (const p of preds) {
+        maxRisk = Math.max(maxRisk, Number((p as { risk_score?: unknown }).risk_score || 0));
+      }
+      const extraInSlot = conflictingAppointments.length - 1;
+      const ev = await noShowOverbookingService.evaluate(tenantId, doctorId, maxRisk, extraInSlot);
+      if (!ev.allowed) {
+        return false;
+      }
     }
 
     return true;
@@ -220,9 +330,25 @@ export class AppointmentService {
     doctorId: string,
     appointmentDate: Date,
     durationMinutes: number,
-    tenantId: string
-  ): Promise<boolean> {
+    tenantId: string,
+  ): Promise<{
+    overbooked: boolean;
+    overbooking_detail?: BookAppointmentMeta['overbooking'];
+  }> {
     const appointmentEnd = addMinutes(appointmentDate, durationMinutes);
+    const dateOnly = format(appointmentDate, 'yyyy-MM-dd');
+    const timeOffRows = await trx('doctor_time_off')
+      .where({ doctor_id: doctorId, tenant_id: tenantId })
+      .select('start_date', 'end_date');
+    if (this.isDateInDoctorTimeOff(dateOnly, timeOffRows)) {
+      throw new ApiError(409, 'Time slot is not available');
+    }
+    const breakRows = await trx('doctor_breaks')
+      .where({ doctor_id: doctorId, tenant_id: tenantId, is_active: true })
+      .select('day_of_week', 'start_time', 'end_time');
+    if (this.breaksOverlapSlot(appointmentDate, appointmentEnd, breakRows)) {
+      throw new ApiError(409, 'Time slot is not available');
+    }
 
     // Lock the doctor's appointments for this time slot
     const conflictingAppointments = await trx('appointments')
@@ -241,7 +367,51 @@ export class AppointmentService {
       })
       .forUpdate(); // Lock rows for update
 
-    return conflictingAppointments.length === 0;
+    if (conflictingAppointments.length === 0) {
+      return { overbooked: false };
+    }
+
+    const ids = conflictingAppointments.map((c: { id: string }) => c.id);
+    const preds = await trx('appointment_no_show_predictions')
+      .where({ tenant_id: tenantId, is_current: true })
+      .whereIn('appointment_id', ids)
+      .select('risk_score');
+    let maxRisk = 0;
+    for (const p of preds) {
+      maxRisk = Math.max(maxRisk, Number((p as { risk_score?: unknown }).risk_score || 0));
+    }
+    const extraInSlot = conflictingAppointments.length - 1;
+    const detailed = await noShowOverbookingService.evaluateDetailed(
+      tenantId,
+      doctorId,
+      maxRisk,
+      extraInSlot,
+    );
+
+    const detailPayload: BookAppointmentMeta['overbooking'] = {
+      reason: detailed.reason,
+      risk_score: detailed.risk_score,
+      risk_threshold: detailed.risk_threshold,
+      max_extra_slots: detailed.max_extra_slots,
+      current_extra_in_slot: detailed.current_extra_in_slot,
+      overlapping_appointments: conflictingAppointments.length,
+      rule_enabled: detailed.rule_enabled,
+    };
+
+    if (detailed.allowed) {
+      logger.info('Slot overbooking approved (transaction)', {
+        tenantId,
+        doctorId,
+        maxRisk,
+        extraInSlot,
+        reason: detailed.reason,
+      });
+      return { overbooked: true, overbooking_detail: detailPayload };
+    }
+
+    throw new ApiError(409, 'Time slot is no longer available', {
+      overbooking: detailPayload,
+    });
   }
 
   /**
@@ -267,12 +437,25 @@ export class AppointmentService {
       .where({ doctor_id: doctorId, tenant_id: tenantId })
       .whereBetween('date', [format(startDate, 'yyyy-MM-dd'), format(endDateOrDefault, 'yyyy-MM-dd')]);
 
+    const [doctorBreaks, doctorTimeOff] = await Promise.all([
+      db('doctor_breaks')
+        .where({ doctor_id: doctorId, tenant_id: tenantId, is_active: true })
+        .select('day_of_week', 'start_time', 'end_time'),
+      db('doctor_time_off').where({ doctor_id: doctorId, tenant_id: tenantId }).select('start_date', 'end_date'),
+    ]);
+
     // Generate available slots
     const availableSlots: Date[] = [];
     const currentDate = new Date(startDate);
 
     while (isBefore(currentDate, endDateOrDefault)) {
       const dayOfWeek = currentDate.getDay();
+      const ymd = format(currentDate, 'yyyy-MM-dd');
+      if (this.isDateInDoctorTimeOff(ymd, doctorTimeOff)) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        currentDate.setHours(0, 0, 0, 0);
+        continue;
+      }
       const dayAvailability = availability.filter((a) => a.day_of_week === dayOfWeek);
 
       for (const av of dayAvailability) {
@@ -295,8 +478,10 @@ export class AppointmentService {
             
             // Check if not conflicting with existing appointment
             const hasConflict = this.hasAppointmentConflict(slotTime, durationMinutes, appointments);
+            const slotEnd = addMinutes(slotTime, durationMinutes);
+            const inBreak = this.breaksOverlapSlot(slotTime, slotEnd, doctorBreaks);
 
-            if (!isBlocked && !hasConflict) {
+            if (!isBlocked && !hasConflict && !inBreak) {
               availableSlots.push(new Date(slotTime));
             }
           }
@@ -402,6 +587,8 @@ export class AppointmentService {
     if (appointment) {
       await this.clearAppointmentCache(tenantId, appointment.doctor_id, appointment.patient_id);
     }
+
+    fireGoogleCalendarSync(appointmentId);
   }
 
   /**
@@ -463,6 +650,8 @@ export class AppointmentService {
         entity_id: appointmentId,
       });
     });
+
+    fireGoogleCalendarSync(appointmentId);
   }
 
   /**
@@ -526,6 +715,8 @@ export class AppointmentService {
         entity_id: appointmentId,
       });
     });
+
+    fireGoogleCalendarSync(appointmentId);
   }
 
   /**
@@ -536,8 +727,8 @@ export class AppointmentService {
 
     let query = db('appointments').where({ tenant_id: tenantId });
 
-    // Admin / Developer / Receptionist (SRS Rev 02): tenant-wide appointment context
-    if (role === 'admin' || role === 'developer' || role === 'receptionist') {
+    // Admin / Developer: tenant-wide appointment context
+    if (role === 'admin' || role === 'developer') {
       query = query
         .leftJoin('doctors', 'appointments.doctor_id', 'doctors.id')
         .leftJoin('users as doctor_users', 'doctors.user_id', 'doctor_users.id')
@@ -549,7 +740,7 @@ export class AppointmentService {
             "TRIM(CONCAT(COALESCE(doctor_users.first_name, ''), ' ', COALESCE(doctor_users.last_name, ''))) as doctorName"
           ),
           db.raw(
-            "TRIM(CONCAT(COALESCE(patient_users.first_name, ''), ' ', COALESCE(patient_users.last_name, ''))) as patientName"
+            "COALESCE(NULLIF(TRIM(CONCAT(COALESCE(patient_users.first_name, ''), ' ', COALESCE(patient_users.last_name, ''))), ''), appointments.guest_name, 'מטופל') as patientName"
           ),
           'doctors.specialty as specialty'
         );
@@ -653,6 +844,49 @@ export class AppointmentService {
     return appointment;
   }
 
+  private toYmd(value: unknown): string {
+    if (value == null) return '';
+    if (value instanceof Date) return format(value, 'yyyy-MM-dd');
+    const s = String(value);
+    if (s.length >= 10) {
+      if (s.includes('T')) {
+        return format(new Date(s), 'yyyy-MM-dd');
+      }
+      return s.slice(0, 10);
+    }
+    return '';
+  }
+
+  private isDateInDoctorTimeOff(ymd: string, rows: any[]): boolean {
+    return rows.some((r) => {
+      const a = this.toYmd(r.start_date);
+      const b = this.toYmd(r.end_date);
+      return a <= ymd && ymd <= b;
+    });
+  }
+
+  private timePartsToMinutes(t: unknown): number {
+    const s = String(t ?? '');
+    const m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return -1;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+
+  /** True if [slotStart, slotEnd) overlaps any doctor break on that weekday. */
+  private breaksOverlapSlot(slotStart: Date, slotEnd: Date, breaks: any[]): boolean {
+    const dow = slotStart.getDay();
+    const sm = slotStart.getHours() * 60 + slotStart.getMinutes();
+    const em = slotEnd.getHours() * 60 + slotEnd.getMinutes();
+    for (const br of breaks) {
+      if (Number(br.day_of_week) !== dow) continue;
+      const bs = this.timePartsToMinutes(br.start_time);
+      const be = this.timePartsToMinutes(br.end_time);
+      if (bs < 0 || be < 0) continue;
+      if (sm < be && em > bs) return true;
+    }
+    return false;
+  }
+
   /**
    * Helper: Check if slot is blocked by exception
    */
@@ -711,13 +945,10 @@ export class AppointmentService {
   }
 
   /**
-   * AI no-show prediction: compute risk score for an appointment (heuristic-based).
-   * Returns risk level and score 0-100. Replace with ML model in production.
+   * Data-driven no-show prediction.
+   * Trains a lightweight logistic model on tenant historical appointments.
    */
   public async getNoShowRisk(appointmentId: string, tenantId: string): Promise<{ risk: 'low' | 'medium' | 'high'; score: number; factors: string[] }> {
-    const factors: string[] = [];
-    let score = 20; // base
-
     const appointment = await db('appointments')
       .where({ id: appointmentId, tenant_id: tenantId })
       .first();
@@ -725,36 +956,92 @@ export class AppointmentService {
       return { risk: 'low', score: 0, factors: ['Appointment not found'] };
     }
 
-    const appointmentDate = new Date(appointment.appointment_date);
-    const hoursUntil = (appointmentDate.getTime() - Date.now()) / (1000 * 60 * 60);
+    const rows = await db('appointments')
+      .where({ tenant_id: tenantId })
+      .whereIn('status', ['completed', 'no_show', 'cancelled'])
+      .whereNotNull('appointment_date')
+      .orderBy('appointment_date', 'desc')
+      .limit(3000)
+      .select('patient_id', 'status', 'appointment_date', 'created_at', 'duration_minutes');
 
-    if (hoursUntil < 24) factors.push('Less than 24h until appointment');
-    if (hoursUntil < 2) {
-      score += 25;
-      factors.push('Within 2 hours');
-    } else if (hoursUntil < 24) {
-      score += 10;
+    const byPatient = new Map<string, { total: number; noShows: number }>();
+    for (const r of rows) {
+      const pid = (r as any).patient_id ? String((r as any).patient_id) : '';
+      if (!pid) continue;
+      const cur = byPatient.get(pid) || { total: 0, noShows: 0 };
+      cur.total += 1;
+      if ((r as any).status === 'no_show') cur.noShows += 1;
+      byPatient.set(pid, cur);
     }
 
-    const patientId = appointment.patient_id;
-    const pastNoShows = await db('appointments')
-      .where({ patient_id: patientId, tenant_id: tenantId, status: 'no_show' })
-      .count('id as count')
-      .first();
-    const noShowCount = Number((pastNoShows as any)?.count || 0);
-    if (noShowCount > 0) {
-      score += Math.min(noShowCount * 15, 35);
-      factors.push(`Patient has ${noShowCount} past no-show(s)`);
+    const featuresFrom = (r: any): number[] => {
+      const appt = new Date(r.appointment_date);
+      const created = r.created_at ? new Date(r.created_at) : new Date(appt.getTime() - 24 * 3600 * 1000);
+      const leadHours = Math.max(0, (appt.getTime() - created.getTime()) / 3600000);
+      const hour = appt.getHours();
+      const dow = appt.getDay();
+      const duration = Number(r.duration_minutes || 0);
+      const pid = r.patient_id ? String(r.patient_id) : '';
+      const hist = byPatient.get(pid) || { total: 0, noShows: 0 };
+      const patientNoShowRate = hist.total > 0 ? hist.noShows / hist.total : 0;
+      const patientApptCount = hist.total;
+      return [
+        1, // bias
+        Math.min(leadHours, 24 * 14) / (24 * 14), // 0..1 (up to 14 days)
+        hour / 23,
+        dow / 6,
+        Math.min(duration, 180) / 180,
+        patientNoShowRate,
+        Math.min(patientApptCount, 30) / 30,
+      ];
+    };
+
+    const train = rows.filter((r: any) => r.status === 'no_show' || r.status === 'completed');
+    // Fallback to neutral output when insufficient data.
+    if (train.length < 25) {
+      return {
+        risk: 'medium',
+        score: 50,
+        factors: ['Insufficient historical data for model training'],
+      };
     }
 
-    const dayOfWeek = appointmentDate.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      score += 10;
-      factors.push('Weekend appointment');
+    const x = train.map((r: any) => featuresFrom(r));
+    const y = train.map((r: any) => (r.status === 'no_show' ? 1 : 0));
+    const dim = x[0].length;
+    const w = new Array<number>(dim).fill(0);
+    const lr = 0.2;
+    const epochs = 180;
+    const sigmoid = (z: number) => 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, z))));
+
+    for (let epoch = 0; epoch < epochs; epoch += 1) {
+      const grad = new Array<number>(dim).fill(0);
+      for (let i = 0; i < x.length; i += 1) {
+        let z = 0;
+        for (let j = 0; j < dim; j += 1) z += w[j] * x[i][j];
+        const p = sigmoid(z);
+        const err = p - y[i];
+        for (let j = 0; j < dim; j += 1) grad[j] += err * x[i][j];
+      }
+      for (let j = 0; j < dim; j += 1) {
+        w[j] -= (lr / x.length) * grad[j];
+      }
     }
 
-    score = Math.min(100, Math.max(0, score));
-    const risk: 'low' | 'medium' | 'high' = score >= 60 ? 'high' : score >= 35 ? 'medium' : 'low';
+    const targetFeatures = featuresFrom(appointment as any);
+    let z = 0;
+    for (let j = 0; j < dim; j += 1) z += w[j] * targetFeatures[j];
+    const probability = sigmoid(z);
+    const score = Math.max(0, Math.min(100, Math.round(probability * 100)));
+    const risk: 'low' | 'medium' | 'high' = score >= 65 ? 'high' : score >= 35 ? 'medium' : 'low';
+
+    const factors: string[] = [];
+    const leadHoursRaw = targetFeatures[1] * (24 * 14);
+    if (leadHoursRaw < 24) factors.push('Low lead-time before appointment');
+    if (targetFeatures[5] > 0.25) factors.push('Patient historical no-show rate is high');
+    if (targetFeatures[6] < 0.15) factors.push('Limited historical attendance data for patient');
+    factors.push(`Model trained on ${train.length} historical appointments`);
+
     return { risk, score, factors };
   }
 }

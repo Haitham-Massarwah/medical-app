@@ -7,10 +7,9 @@ import { tenantContext } from '../middleware/tenantContext';
 const router = Router();
 const analyticsController = new AnalyticsController();
 
-// All routes require authentication and admin/developer role
+// All routes require authentication + tenant context.
 router.use(authenticate);
 router.use(tenantContext);
-router.use(authorize('admin', 'developer'));
 
 /**
  * @route   GET /api/v1/analytics/dashboard
@@ -19,7 +18,30 @@ router.use(authorize('admin', 'developer'));
  */
 router.get(
   '/dashboard',
+  authorize('admin', 'developer'),
   analyticsController.getDashboardStats
+);
+
+/**
+ * @route   GET /api/v1/analytics/dashboard-activity
+ * @desc    Recent audit activity + signup stats for admin dashboard
+ * @access  Private/Admin
+ */
+router.get(
+  '/dashboard-activity',
+  authorize('admin', 'developer'),
+  analyticsController.getDashboardActivity
+);
+
+/**
+ * @route   GET /api/v1/analytics/advanced
+ * @desc    Revenue + appointments + per-doctor performance (optional date range)
+ */
+router.get(
+  '/advanced',
+  authorize('admin', 'developer', 'doctor'),
+  validateDateRange,
+  analyticsController.getAdvancedAnalytics
 );
 
 /**
@@ -29,6 +51,7 @@ router.get(
  */
 router.get(
   '/admin-health',
+  authorize('admin', 'developer'),
   analyticsController.getAdminHealth
 );
 
@@ -39,6 +62,7 @@ router.get(
  */
 router.get(
   '/appointments',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.getAppointmentAnalytics
 );
@@ -50,6 +74,7 @@ router.get(
  */
 router.get(
   '/revenue',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.getRevenueAnalytics
 );
@@ -61,6 +86,7 @@ router.get(
  */
 router.get(
   '/doctors',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.getDoctorAnalytics
 );
@@ -72,6 +98,7 @@ router.get(
  */
 router.get(
   '/patients',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.getPatientAnalytics
 );
@@ -83,6 +110,7 @@ router.get(
  */
 router.get(
   '/no-shows',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.getNoShowAnalytics
 );
@@ -94,6 +122,7 @@ router.get(
  */
 router.get(
   '/specialties',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.getSpecialtyAnalytics
 );
@@ -105,6 +134,7 @@ router.get(
  */
 router.get(
   '/growth',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.getGrowthMetrics
 );
@@ -116,6 +146,7 @@ router.get(
  */
 router.get(
   '/export',
+  authorize('admin', 'developer'),
   validateDateRange,
   analyticsController.exportData
 );
@@ -127,6 +158,7 @@ router.get(
  */
 router.get(
   '/reports/monthly',
+  authorize('admin', 'developer'),
   analyticsController.getMonthlyReport
 );
 
@@ -137,6 +169,7 @@ router.get(
  */
 router.get(
   '/reports/quarterly',
+  authorize('admin', 'developer'),
   analyticsController.getQuarterlyReport
 );
 
@@ -147,6 +180,7 @@ router.get(
  */
 router.get(
   '/reports/yearly',
+  authorize('admin', 'developer'),
   analyticsController.getYearlyReport
 );
 

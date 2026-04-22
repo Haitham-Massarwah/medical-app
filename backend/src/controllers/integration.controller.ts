@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import db from '../config/database';
 import { AuthorizationError, ValidationError } from '../middleware/errorHandler';
 
-const STAFF = ['admin', 'developer', 'receptionist', 'doctor', 'paramedical'];
+const STAFF = ['admin', 'developer', 'doctor', 'paramedical'];
 const ADMIN = ['admin', 'developer'];
 
 export class IntegrationController {

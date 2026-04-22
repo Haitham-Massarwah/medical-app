@@ -4,6 +4,7 @@ import { TenantController } from '../controllers/tenant.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validateRequest, validatePagination, validateUUID } from '../middleware/validator';
 import { allowCrossTenant } from '../middleware/tenantContext';
+import { bodyOptionalLooseContactPhone } from '../middleware/phoneValidation';
 
 const router = Router();
 const tenantController = new TenantController();
@@ -59,7 +60,7 @@ router.post(
     body('subdomain').trim().notEmpty().withMessage('Subdomain is required')
       .matches(/^[a-z0-9-]+$/).withMessage('Subdomain must be lowercase alphanumeric with hyphens'),
     body('contact_email').isEmail().normalizeEmail().withMessage('Valid contact email required'),
-    body('contact_phone').optional().isMobilePhone('any'),
+    bodyOptionalLooseContactPhone(),
     body('address').optional().trim(),
     body('city').optional().trim(),
     body('country').optional().trim(),
@@ -81,7 +82,7 @@ router.put(
   validateRequest([
     body('name').optional().trim().notEmpty(),
     body('contact_email').optional().isEmail().normalizeEmail(),
-    body('contact_phone').optional().isMobilePhone('any'),
+    bodyOptionalLooseContactPhone(),
     body('address').optional().trim(),
     body('city').optional().trim(),
     body('country').optional().trim(),

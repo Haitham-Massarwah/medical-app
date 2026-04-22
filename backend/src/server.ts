@@ -4,24 +4,36 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 import { createServer } from 'http';
 import os from 'os';
 
 // Load environment variables
 // Check NODE_ENV from environment first (before dotenv loads)
 const nodeEnv = process.env.NODE_ENV || 'development';
-// Load .env.production if NODE_ENV is production, otherwise .env
-if (nodeEnv === 'production') {
-  dotenv.config({ path: '.env.production' });
-} else {
-  dotenv.config();
+// Load env files in order (later files override earlier values).
+// This lets each clinic keep secrets in .env.local across upgrades.
+const envFiles =
+  nodeEnv === 'production'
+    ? ['.env.production', '.env', '.env.local', '.env.production.local']
+    : ['.env', '.env.local'];
+
+for (const file of envFiles) {
+  const fullPath = path.join(process.cwd(), file);
+  if (fs.existsSync(fullPath)) {
+    dotenv.config({ path: fullPath, override: true });
+  }
 }
 
 // Import configurations
 import { corsOptions } from './config/cors';
+import { validateEnvironment } from './config/env';
 import { rateLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
-import { logger } from './config/logger';
+import { logger, getAppPackageVersion } from './config/logger';
+
+validateEnvironment();
 
 // Import routes
 import authRoutes from './routes/auth.routes';
@@ -46,9 +58,20 @@ import formsRoutes from './routes/forms.routes';
 import crmRoutes from './routes/crm.routes';
 import financeRoutes from './routes/finance.routes';
 import integrationRoutes from './routes/integration.routes';
+import operationsRoutes from './routes/operations.routes';
+import auditRoutes from './routes/audit.routes';
+import noShowAiRoutes from './routes/noShowAi.routes';
+import clinicTemplatesRoutes from './routes/clinicTemplates.routes';
+import telegramRoutes from './routes/telegram.routes';
+import { noShowCronService } from './services/noShowCron.service';
+import { appointmentSmsAutomationService } from './services/appointmentSmsAutomation.service';
+import { setTelegramWebhook, isTelegramConfigured } from './services/telegram.service';
 
 const app: Application = express();
 const httpServer = createServer(app);
+
+// Behind nginx / load balancers: correct req.ip, X-Forwarded-Proto, etc.
+app.set('trust proxy', 1);
 
 // Middleware
 app.use(helmet()); // Security headers
@@ -68,6 +91,7 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
+    appVersion: getAppPackageVersion(),
   });
 });
 
@@ -95,6 +119,11 @@ app.use(`/api/${API_VERSION}/forms`, formsRoutes);
 app.use(`/api/${API_VERSION}/crm`, crmRoutes);
 app.use(`/api/${API_VERSION}/finance`, financeRoutes);
 app.use(`/api/${API_VERSION}/integrations`, integrationRoutes);
+app.use(`/api/${API_VERSION}/operations`, operationsRoutes);
+app.use(`/api/${API_VERSION}/audit`, auditRoutes);
+app.use(`/api/${API_VERSION}/ai/no-show`, noShowAiRoutes);
+app.use(`/api/${API_VERSION}/templates`, clinicTemplatesRoutes);
+app.use(`/api/${API_VERSION}/telegram`, telegramRoutes);
 
 // Root redirect to frontend
 app.get('/', (_req, res) => {
@@ -113,28 +142,44 @@ app.use((req, res) => {
 // Error handler (must be last)
 app.use(errorHandler);
 
-// Start server
+// Start server only when executed directly (not when imported by tests)
 const PORT = process.env.PORT || 3000;
 
-httpServer.listen(PORT, () => {
-  logger.info(`🚀 Server running on port ${PORT}`);
-  logger.info(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`🔗 API Base URL: http://localhost:${PORT}/api/${API_VERSION}`);
-  logger.info(`❤️  Health Check: http://localhost:${PORT}/health`);
-  logger.info(`🌐 CORS Enabled: Development mode is permissive`);
-  logger.info(`🏥 Medical Appointment System Backend Ready!`);
-  logger.info('');
-  logger.info('📋 Connection Info:');
-  logger.info(`   - Local: http://localhost:${PORT}`);
-  
-  // Get network IP address
-  const networkInterfaces = os.networkInterfaces();
-  const ipAddress = Object.values(networkInterfaces)
-    .flat()
-    .find(iface => iface && !iface.internal && iface.family === 'IPv4')?.address || '0.0.0.0';
-  logger.info(`   - Network: http://${ipAddress}:${PORT}`);
-  logger.info(`   - CORS Origins: ${process.env.CORS_ORIGIN || 'All (development mode)'}`);
-});
+export const startServer = () => {
+  return httpServer.listen(PORT, () => {
+    logger.info(`🚀 Server running on port ${PORT}`);
+    logger.info(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`🔗 API Base URL: http://localhost:${PORT}/api/${API_VERSION}`);
+    logger.info(`❤️  Health Check: http://localhost:${PORT}/health`);
+    logger.info(`🌐 CORS Enabled: Development mode is permissive`);
+    logger.info(`🏥 Medical Appointment System Backend Ready!`);
+    logger.info('');
+    logger.info('📋 Connection Info:');
+    logger.info(`   - Local: http://localhost:${PORT}`);
+
+    // Get network IP address
+    const networkInterfaces = os.networkInterfaces();
+    const ipAddress =
+      Object.values(networkInterfaces)
+        .flat()
+        .find((iface) => iface && !iface.internal && iface.family === 'IPv4')?.address || '0.0.0.0';
+    logger.info(`   - Network: http://${ipAddress}:${PORT}`);
+    logger.info(`   - CORS Origins: ${process.env.CORS_ORIGIN || 'All (development mode)'}`);
+    noShowCronService.start();
+    appointmentSmsAutomationService.start();
+
+    // Register the Telegram webhook once at startup when TELEGRAM_WEBHOOK_URL is set.
+    if (isTelegramConfigured()) {
+      setTelegramWebhook().catch((e) =>
+        logger.warn('Telegram webhook registration failed', { message: (e as Error)?.message }),
+      );
+    }
+  });
+};
+
+if (!process.env.JEST_WORKER_ID) {
+  startServer();
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

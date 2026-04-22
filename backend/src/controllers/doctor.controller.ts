@@ -1,9 +1,27 @@
 import { Request, Response, NextFunction } from 'express';
-import { asyncHandler, NotFoundError, AuthenticationError } from '../middleware/errorHandler';
+import { asyncHandler, NotFoundError, AuthenticationError, ValidationError, AuthorizationError } from '../middleware/errorHandler';
 import db from '../config/database';
 import { logger } from '../config/logger';
 
 export class DoctorController {
+  private async assertDoctorAccess(req: Request, doctorId: string): Promise<string> {
+    const tenantId = req.tenantId || req.user?.tenantId || req.user?.tenant_id;
+    if (!tenantId) {
+      throw new AuthenticationError('Tenant not found');
+    }
+
+    if (req.user?.role === 'doctor') {
+      const ownDoctor = await db('doctors')
+        .where({ user_id: req.user.userId || req.user.id, tenant_id: tenantId })
+        .first('id');
+      if (!ownDoctor || ownDoctor.id !== doctorId) {
+        throw new AuthorizationError('Doctor can access only own schedule');
+      }
+    }
+
+    return String(tenantId);
+  }
+
   /**
    * Get all doctors
    * GET /api/v1/doctors
@@ -158,6 +176,7 @@ export class DoctorController {
         'users.last_name',
         'users.email',
         'users.phone',
+        'users.metadata as user_metadata',
         'doctors.specialty as specialty_name'
       )
       .first();
@@ -166,10 +185,26 @@ export class DoctorController {
       throw new NotFoundError('Doctor');
     }
 
+    const userMeta =
+      doctor.user_metadata && typeof doctor.user_metadata === 'object'
+        ? (doctor.user_metadata as Record<string, unknown>)
+        : {};
+    const discountEndRaw = (userMeta.discount_end_at || '').toString();
+    const discountPctRaw = Number(userMeta.discount_percentage || 0);
+    const discountStillActive =
+      discountEndRaw.length > 0 &&
+      !Number.isNaN(Date.parse(discountEndRaw)) &&
+      new Date(discountEndRaw).getTime() >= Date.now();
+    const effectiveDiscount = discountStillActive ? Math.max(0, Math.min(100, discountPctRaw)) : 0;
+
     res.status(200).json({
       status: 'success',
       data: {
-        doctor,
+        doctor: {
+          ...doctor,
+          effective_discount_percentage: effectiveDiscount,
+          billing_discount_active: effectiveDiscount > 0,
+        },
       },
     });
   });
@@ -230,9 +265,15 @@ export class DoctorController {
       throw new NotFoundError('Doctor');
     }
 
-    // Get working hours
-    const workingHours = await db('availability')
-      .where({ doctor_id: id });
+    const [workingHours, breaks, timeOff] = await Promise.all([
+      db('availability').where({ doctor_id: id, is_active: true }),
+      db('doctor_breaks')
+        .where({ doctor_id: id, is_active: true })
+        .select('day_of_week', 'start_time', 'end_time'),
+      db('doctor_time_off')
+        .where({ doctor_id: id })
+        .select('start_date', 'end_date', 'reason', 'is_holiday'),
+    ]);
 
     // Get appointments for the date (if provided)
     let bookedSlots: any[] = [];
@@ -240,7 +281,7 @@ export class DoctorController {
       bookedSlots = await db('appointments')
         .where({ doctor_id: id })
         .andWhere('appointment_date', date)
-        .andWhere('status', 'confirmed')
+        .whereIn('status', ['scheduled', 'confirmed'])
         .select('start_time', 'end_time');
     }
 
@@ -248,6 +289,8 @@ export class DoctorController {
       status: 'success',
       data: {
         working_hours: workingHours,
+        breaks,
+        time_off: timeOff,
         booked_slots: bookedSlots,
       },
     });
@@ -305,6 +348,7 @@ export class DoctorController {
     const {
       user_id,
       specialty_id,
+      business_file_id,
       license_number,
       years_of_experience: _years_of_experience,
       bio,
@@ -315,13 +359,23 @@ export class DoctorController {
     const normalizedEducation = Array.isArray(education)
       ? education.join(', ')
       : education;
+    const normalizedBusinessId = String(business_file_id || '').replace(/[^\d]/g, '');
+    if (!/^\d{5,9}$/.test(normalizedBusinessId)) {
+      throw new ValidationError('Business identifier must be 5-9 digits');
+    }
+    const normalizedLicense = String(license_number || '').trim();
+    const primaryIdentifierValue = normalizedLicense || normalizedBusinessId;
+    const primaryIdentifierType = normalizedLicense ? 'medical_license' : 'business_file_id';
 
     const [doctor] = await db('doctors')
       .insert({
         user_id,
         tenant_id: tenantId,
         specialty: req.body.specialty || specialty_id || 'General',
-        license_number,
+        license_number: normalizedLicense || null,
+        business_file_id: normalizedBusinessId,
+        primary_identifier_type: primaryIdentifierType,
+        primary_identifier_value: primaryIdentifierValue,
         bio,
         education: normalizedEducation,
         languages,
@@ -350,12 +404,49 @@ export class DoctorController {
   updateDoctor = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
     const tenantId = req.tenantId!;
+    const currentDoctor = await db('doctors').where({ id, tenant_id: tenantId }).first();
+    if (!currentDoctor) {
+      throw new NotFoundError('Doctor');
+    }
 
-    const { education, certifications: _certifications, ...rest } = req.body;
+    const {
+      education,
+      certifications: _certifications,
+      business_file_id,
+      license_number,
+      pdf_branding,
+      ...rest
+    } = req.body;
     const updateData: any = {
       ...rest,
       updated_at: new Date(),
     };
+    if (pdf_branding !== undefined) {
+      updateData.pdf_branding =
+        typeof pdf_branding === 'object' && pdf_branding !== null && !Array.isArray(pdf_branding)
+          ? pdf_branding
+          : {};
+    }
+    if (business_file_id !== undefined) {
+      const normalizedBusinessId = String(business_file_id || '').replace(/[^\d]/g, '');
+      if (!/^\d{5,9}$/.test(normalizedBusinessId)) {
+        throw new ValidationError('Business identifier must be 5-9 digits');
+      }
+      updateData.business_file_id = normalizedBusinessId;
+    }
+    if (license_number !== undefined) {
+      updateData.license_number = String(license_number || '').trim() || null;
+    }
+    const nextBusinessId = updateData.business_file_id;
+    const nextLicense = updateData.license_number;
+    if (nextBusinessId !== undefined || nextLicense !== undefined) {
+      const effectiveBusinessId = nextBusinessId ?? currentDoctor.business_file_id;
+      const effectiveLicense = nextLicense ?? currentDoctor.license_number;
+      const primaryIdentifierValue = effectiveLicense || effectiveBusinessId;
+      const primaryIdentifierType = effectiveLicense ? 'medical_license' : 'business_file_id';
+      updateData.primary_identifier_type = primaryIdentifierType;
+      updateData.primary_identifier_value = primaryIdentifierValue || null;
+    }
     if (education !== undefined) {
       updateData.education = Array.isArray(education)
         ? education.join(', ')
@@ -390,15 +481,17 @@ export class DoctorController {
   updateSchedule = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
     const { working_hours } = req.body;
+    const tenantId = await this.assertDoctorAccess(req, id);
 
     // Delete existing schedule
     await db('availability')
-      .where({ doctor_id: id })
+      .where({ doctor_id: id, tenant_id: tenantId })
       .delete();
 
     // Insert new schedule
     const scheduleData = working_hours.map((slot: any) => ({
       doctor_id: id,
+      tenant_id: tenantId,
       day_of_week: slot.day_of_week,
       start_time: slot.start_time,
       end_time: slot.end_time,
@@ -422,13 +515,16 @@ export class DoctorController {
    */
   addTimeOff = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
-    const { start_date, end_date, reason } = req.body;
+    const { start_date, end_date, reason, is_holiday } = req.body;
+    const tenantId = await this.assertDoctorAccess(req, id);
 
     const [timeOff] = await db('doctor_time_off')
       .insert({
         doctor_id: id,
+        tenant_id: tenantId,
         start_date,
         end_date,
+        is_holiday: is_holiday === true,
         reason,
         created_at: new Date(),
         updated_at: new Date(),
@@ -443,6 +539,109 @@ export class DoctorController {
       data: {
         time_off: timeOff,
       },
+    });
+  });
+
+  /**
+   * Get doctor schedule settings
+   * GET /api/v1/doctors/:id/schedule-settings
+   */
+  getScheduleSettings = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const tenantId = await this.assertDoctorAccess(req, id);
+
+    const [workingHours, breaks, timeOff] = await Promise.all([
+      db('availability')
+        .where({ doctor_id: id, tenant_id: tenantId })
+        .select('day_of_week', 'start_time', 'end_time')
+        .orderBy('day_of_week', 'asc')
+        .orderBy('start_time', 'asc'),
+      db('doctor_breaks')
+        .where({ doctor_id: id, tenant_id: tenantId, is_active: true })
+        .select('id', 'day_of_week', 'start_time', 'end_time')
+        .orderBy('day_of_week', 'asc')
+        .orderBy('start_time', 'asc'),
+      db('doctor_time_off')
+        .where({ doctor_id: id, tenant_id: tenantId })
+        .select('id', 'start_date', 'end_date', 'reason', 'is_holiday')
+        .orderBy('start_date', 'asc'),
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        working_hours: workingHours,
+        breaks,
+        time_off: timeOff,
+      },
+    });
+  });
+
+  /**
+   * Save doctor schedule settings
+   * PUT /api/v1/doctors/:id/schedule-settings
+   */
+  saveScheduleSettings = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const tenantId = await this.assertDoctorAccess(req, id);
+    const workingHours = Array.isArray(req.body.working_hours) ? req.body.working_hours : [];
+    const breaks = Array.isArray(req.body.breaks) ? req.body.breaks : [];
+    const timeOff = Array.isArray(req.body.time_off) ? req.body.time_off : [];
+
+    await db.transaction(async (trx) => {
+      await trx('availability').where({ doctor_id: id, tenant_id: tenantId }).delete();
+      await trx('doctor_breaks').where({ doctor_id: id, tenant_id: tenantId }).delete();
+      await trx('doctor_time_off').where({ doctor_id: id, tenant_id: tenantId }).delete();
+
+      if (workingHours.length > 0) {
+        await trx('availability').insert(
+          workingHours.map((slot: any) => ({
+            doctor_id: id,
+            tenant_id: tenantId,
+            day_of_week: Number(slot.day_of_week),
+            start_time: String(slot.start_time),
+            end_time: String(slot.end_time),
+            is_active: true,
+            created_at: new Date(),
+            updated_at: new Date(),
+          }))
+        );
+      }
+
+      if (breaks.length > 0) {
+        await trx('doctor_breaks').insert(
+          breaks.map((slot: any) => ({
+            doctor_id: id,
+            tenant_id: tenantId,
+            day_of_week: Number(slot.day_of_week),
+            start_time: String(slot.start_time),
+            end_time: String(slot.end_time),
+            is_active: true,
+            created_at: new Date(),
+            updated_at: new Date(),
+          }))
+        );
+      }
+
+      if (timeOff.length > 0) {
+        await trx('doctor_time_off').insert(
+          timeOff.map((item: any) => ({
+            doctor_id: id,
+            tenant_id: tenantId,
+            start_date: String(item.start_date),
+            end_date: String(item.end_date),
+            reason: item.reason ? String(item.reason) : null,
+            is_holiday: item.is_holiday === true,
+            created_at: new Date(),
+            updated_at: new Date(),
+          }))
+        );
+      }
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Schedule settings saved successfully',
     });
   });
 

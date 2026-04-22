@@ -2,14 +2,28 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import { PatientController } from '../controllers/patient.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { validateRequest, validatePagination, validateUUID } from '../middleware/validator';
+import { isValidIsraeliId, validateRequest, validatePagination, validateUUID } from '../middleware/validator';
 import { tenantContext } from '../middleware/tenantContext';
+import { requireAccountPermission } from '../middleware/accountPermissions.middleware';
+import { bodyOptionalLooseEmergencyPhone } from '../middleware/phoneValidation';
 
 const router = Router();
 const patientController = new PatientController();
+const validatePatientIdParam = validateRequest([
+  param('id').isUUID().withMessage('Valid patient ID is required'),
+]);
+const validateIsraeliIdParam = validateRequest([
+  param('idNumber')
+    .trim()
+    .notEmpty()
+    .withMessage('Israeli ID is required')
+    .bail()
+    .custom((value) => isValidIsraeliId(String(value)))
+    .withMessage('Valid Israeli ID is required'),
+]);
 
 const allowedFileTypes = [
   'image/jpeg',
@@ -67,6 +81,7 @@ const upload = multer({
 // All routes require authentication
 router.use(authenticate);
 router.use(tenantContext);
+router.use(requireAccountPermission('can_manage_doctors'));
 
 /**
  * @route   GET /api/v1/patients
@@ -75,7 +90,7 @@ router.use(tenantContext);
  */
 router.get(
   '/',
-  authorize('doctor', 'admin', 'developer', 'receptionist'),
+  authorize('doctor', 'admin', 'developer'),
   validatePagination,
   patientController.getAllPatients
 );
@@ -105,13 +120,24 @@ router.get(
 // );
 
 /**
+ * @route   GET /api/v1/patients/by-israeli-id/:idNumber
+ * @desc    Get patient by Israeli ID
+ * @access  Private
+ */
+router.get(
+  '/by-israeli-id/:idNumber',
+  validateIsraeliIdParam,
+  patientController.getPatientByIsraeliId
+);
+
+/**
  * @route   GET /api/v1/patients/:id
  * @desc    Get patient by ID
  * @access  Private
  */
 router.get(
   '/:id',
-  validateUUID('id'),
+  validatePatientIdParam,
   patientController.getPatientById
 );
 
@@ -123,7 +149,13 @@ router.get(
 router.post(
   '/',
   validateRequest([
-    body('user_id').isUUID().withMessage('Valid user ID required'),
+    body('id_number')
+      .trim()
+      .notEmpty()
+      .withMessage('Israeli ID is required')
+      .bail()
+      .custom((value) => isValidIsraeliId(String(value)))
+      .withMessage('Valid Israeli ID is required'),
     body('blood_type').optional().isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']),
     body('height').optional().isFloat({ min: 0 }),
     body('weight').optional().isFloat({ min: 0 }),
@@ -131,7 +163,7 @@ router.post(
     body('chronic_conditions').optional().isArray(),
     body('current_medications').optional().isArray(),
     body('emergency_contact_name').optional().trim(),
-    body('emergency_contact_phone').optional().isMobilePhone('any'),
+    bodyOptionalLooseEmergencyPhone(),
   ]),
   patientController.createPatient
 );
@@ -143,7 +175,7 @@ router.post(
  */
 router.put(
   '/:id',
-  validateUUID('id'),
+  validatePatientIdParam,
   validateRequest([
     body('blood_type').optional().isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']),
     body('height').optional().isFloat({ min: 0 }),
@@ -152,7 +184,7 @@ router.put(
     body('chronic_conditions').optional().isArray(),
     body('current_medications').optional().isArray(),
     body('emergency_contact_name').optional().trim(),
-    body('emergency_contact_phone').optional().isMobilePhone('any'),
+    bodyOptionalLooseEmergencyPhone(),
   ]),
   patientController.updatePatient
 );
@@ -165,7 +197,7 @@ router.put(
 router.delete(
   '/:id',
   authorize('admin', 'developer'),
-  validateUUID('id'),
+  validatePatientIdParam,
   patientController.deletePatient
 );
 
@@ -204,7 +236,7 @@ router.delete(
 router.post(
   '/:id/medical-records',
   authorize('doctor', 'paramedical', 'admin', 'developer'),
-  validateUUID('id'),
+  validatePatientIdParam,
   validateRequest([
     body('title').trim().notEmpty(),
     body('description').trim().notEmpty(),
@@ -224,7 +256,7 @@ router.post(
 router.get(
   '/:id/medical-records',
   authorize('patient', 'doctor', 'paramedical', 'admin', 'developer'),
-  validateUUID('id'),
+  validatePatientIdParam,
   patientController.getMedicalRecords
 );
 
@@ -236,7 +268,7 @@ router.get(
 router.put(
   '/:id/medical-records/:recordId',
   authorize('doctor', 'paramedical', 'admin', 'developer'),
-  validateUUID('id'),
+  validatePatientIdParam,
   validateUUID('recordId'),
   validateRequest([
     body('title').optional().trim(),
@@ -256,7 +288,7 @@ router.put(
 router.post(
   '/:id/medical-records/:recordId/attachments',
   authorize('patient', 'doctor', 'paramedical', 'admin', 'developer'),
-  validateUUID('id'),
+  validatePatientIdParam,
   validateUUID('recordId'),
   upload.array('files', 10),
   patientController.uploadMedicalRecordAttachments
@@ -270,7 +302,7 @@ router.post(
 router.get(
   '/:id/medical-records/:recordId/attachments/:fileName',
   authorize('patient', 'doctor', 'paramedical', 'admin', 'developer'),
-  validateUUID('id'),
+  validatePatientIdParam,
   validateUUID('recordId'),
   patientController.getMedicalRecordAttachment
 );

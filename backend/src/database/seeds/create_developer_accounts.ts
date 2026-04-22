@@ -1,13 +1,17 @@
 import { Knex } from 'knex';
 import bcrypt from 'bcryptjs';
 
+/**
+ * Developer + admin accounts for local/testing.
+ * Emails are stored lowercase so login (which lowercases) always matches one canonical row.
+ * Updates every user row whose email matches case-insensitively (fixes duplicate-casing issues).
+ */
 export async function seed(knex: Knex): Promise<void> {
-  // Get or create default tenant
   let defaultTenant = await knex('tenants').where('email', 'admin@medical-appointments.com').first();
-  
+
   if (!defaultTenant) {
     defaultTenant = await knex('tenants').first();
-    
+
     if (!defaultTenant) {
       const [tenant] = await knex('tenants')
         .insert({
@@ -23,86 +27,66 @@ export async function seed(knex: Knex): Promise<void> {
 
   const tenantId = defaultTenant.id;
 
-  // 1. Create Developer Account (Haitham)
   const developerEmail = 'haitham.massarwah@medical-appointments.com';
-  const developerPassword = 'Haitham@0412'; // Password for developer account
-  
-  let developerUser = await knex('users').where({ email: developerEmail }).first();
-  
-  const hashedDeveloperPassword = await bcrypt.hash(developerPassword, 12);
-  if (!developerUser) {
-    const [devUser] = await knex('users')
-      .insert({
+  const adminEmail = 'admin@medical-appointments.com';
+  const sharedPassword = 'Haitham@0412';
+
+  const hashDev = await bcrypt.hash(sharedPassword, 12);
+  const hashAdmin = await bcrypt.hash(sharedPassword, 12);
+
+  async function ensureStaffUser(
+    canonicalEmail: string,
+    passwordHash: string,
+    role: 'developer' | 'admin',
+    firstName: string,
+    lastName: string
+  ): Promise<void> {
+    const rows = await knex('users').whereRaw('LOWER(email) = ?', [canonicalEmail]);
+
+    if (rows.length === 0) {
+      await knex('users').insert({
         tenant_id: tenantId,
-        email: developerEmail,
-        password_hash: hashedDeveloperPassword,
-        first_name: 'Haitham',
-        last_name: 'Massarwah',
-        role: 'developer',
+        email: canonicalEmail,
+        password_hash: passwordHash,
+        first_name: firstName,
+        last_name: lastName,
+        role,
         preferred_language: 'he',
         is_email_verified: true,
         created_at: new Date(),
         updated_at: new Date(),
-      })
-      .returning('*');
-    developerUser = devUser;
-    console.log('✅ Developer account created:', developerEmail);
-  } else {
-    await knex('users')
-      .where({ id: developerUser.id })
-      .update({
-        password_hash: hashedDeveloperPassword,
-        updated_at: new Date(),
       });
-    console.log('♻️  Developer account updated:', developerEmail);
-  }
+      console.log(`✅ ${role} account created: ${canonicalEmail}`);
+      return;
+    }
 
-  // 2. Create Admin Account
-  const adminEmail = 'Admin@medical-appointments.com';
-  const adminPassword = 'Haitham@0412';
-  
-  let adminUser = await knex('users').where({ email: adminEmail }).first();
-  
-  const hashedAdminPassword = await bcrypt.hash(adminPassword, 12);
-  if (!adminUser) {
-    const [newAdmin] = await knex('users')
-      .insert({
-        tenant_id: tenantId,
-        email: adminEmail,
-        password_hash: hashedAdminPassword,
-        first_name: 'System',
-        last_name: 'Admin',
-        role: 'admin',
-        preferred_language: 'he',
+    const updated = await knex('users')
+      .whereRaw('LOWER(email) = ?', [canonicalEmail])
+      .update({
+        email: canonicalEmail,
+        password_hash: passwordHash,
+        role,
+        first_name: firstName,
+        last_name: lastName,
         is_email_verified: true,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .returning('*');
-    adminUser = newAdmin;
-    console.log('✅ Admin account created:', adminEmail);
-  } else {
-    await knex('users')
-      .where({ id: adminUser.id })
-      .update({
-        password_hash: hashedAdminPassword,
         updated_at: new Date(),
       });
-    console.log('♻️  Admin account updated:', adminEmail);
+
+    if (rows.length > 1) {
+      console.warn(
+        `⚠️  Merged ${rows.length} user rows for ${canonicalEmail} (case-duplicate fix). Updated ${updated} row(s).`
+      );
+    } else {
+      console.log(`♻️  ${role} account updated: ${canonicalEmail}`);
+    }
   }
 
-  console.log('\n📋 Admin/Developer Credentials:');
+  await ensureStaffUser(developerEmail, hashDev, 'developer', 'Haitham', 'Massarwah');
+  await ensureStaffUser(adminEmail, hashAdmin, 'admin', 'System', 'Admin');
+
+  console.log('\n📋 Admin/Developer Credentials (login with lowercase email):');
   console.log('================================');
-  console.log('\n👨‍💻 Developer Account:');
-  console.log(`   Email: ${developerEmail}`);
-  console.log(`   Password: ${developerPassword}`);
-  console.log(`   Role: developer`);
-  console.log(`   Status: Active`);
-  console.log('\n🛡️ Admin Account:');
-  console.log(`   Email: ${adminEmail}`);
-  console.log(`   Password: ${adminPassword}`);
-  console.log(`   Role: admin`);
-  console.log(`   Status: Active`);
-  console.log('\n================================\n');
+  console.log(`   Developer: ${developerEmail} / ${sharedPassword}`);
+  console.log(`   Admin:     ${adminEmail} / ${sharedPassword}`);
+  console.log('================================\n');
 }
-

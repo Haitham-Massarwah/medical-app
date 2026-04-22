@@ -2,6 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import db from '../config/database';
 import { logger } from '../config/logger';
 
+/** Match JWT payload: login sets `id`; some paths only expose `userId`. */
+function resolveActorUserId(req: Request): string | undefined {
+  const u = req.user;
+  if (!u) return undefined;
+  return u.id ?? u.userId ?? undefined;
+}
+
 /**
  * Middleware to check if doctor has an active subscription
  * This should be applied to routes that require a valid subscription
@@ -12,7 +19,7 @@ export async function requireActiveSubscription(
   next: NextFunction
 ): Promise<void> {
   try {
-    const userId = req.user?.id;
+    const userId = resolveActorUserId(req);
     const userRole = req.user?.role;
 
     // Only check for doctors and paramedical staff
@@ -87,7 +94,7 @@ export async function checkAppointmentLimit(
   next: NextFunction
 ): Promise<void> {
   try {
-    const userId = req.user?.id;
+    const userId = resolveActorUserId(req);
     const userRole = req.user?.role;
 
     // Only check for doctors and paramedical staff
@@ -184,7 +191,7 @@ export async function warnIfNoSubscription(
   next: NextFunction
 ): Promise<void> {
   try {
-    const userId = req.user?.id;
+    const userId = resolveActorUserId(req);
     const userRole = req.user?.role;
 
     if (!userId || !['doctor', 'paramedical'].includes(userRole || '')) {

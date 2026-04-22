@@ -100,7 +100,13 @@ router.post(
   validateRequest([
     body('user_id').isUUID().withMessage('Valid user ID required'),
     body('specialty').trim().notEmpty().withMessage('Specialty required').optional(),
-    body('license_number').trim().notEmpty().withMessage('License number required'),
+    body('business_file_id')
+      .trim()
+      .notEmpty()
+      .withMessage('Business identifier is required')
+      .matches(/^\d{5,9}$/)
+      .withMessage('Business identifier must be 5-9 digits'),
+    body('license_number').optional().trim().isLength({ min: 3, max: 64 }),
     body('bio').optional().trim(),
     body('education')
       .optional()
@@ -124,6 +130,7 @@ router.put(
   validateUUID('id'),
   validateRequest([
     body('specialty').optional().trim().notEmpty(),
+    body('business_file_id').optional().trim().matches(/^\d{5,9}$/).withMessage('Business identifier must be 5-9 digits'),
     body('license_number').optional().trim().notEmpty(),
     body('bio').optional().trim(),
     body('education')
@@ -167,9 +174,49 @@ router.post(
   validateRequest([
     body('start_date').isISO8601().withMessage('Valid start date required'),
     body('end_date').isISO8601().withMessage('Valid end date required'),
+    body('is_holiday').optional().isBoolean(),
     body('reason').optional().trim(),
   ]),
   doctorController.addTimeOff
+);
+
+/**
+ * @route   GET /api/v1/doctors/:id/schedule-settings
+ * @desc    Get doctor schedule settings (hours/breaks/time-off)
+ * @access  Private/Doctor/Admin
+ */
+router.get(
+  '/:id([0-9a-fA-F-]{36})/schedule-settings',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('id'),
+  doctorController.getScheduleSettings
+);
+
+/**
+ * @route   PUT /api/v1/doctors/:id/schedule-settings
+ * @desc    Save doctor schedule settings (hours/breaks/time-off)
+ * @access  Private/Doctor/Admin
+ */
+router.put(
+  '/:id([0-9a-fA-F-]{36})/schedule-settings',
+  authorize('doctor', 'admin', 'developer'),
+  validateUUID('id'),
+  validateRequest([
+    body('working_hours').isArray(),
+    body('working_hours.*.day_of_week').isInt({ min: 0, max: 6 }),
+    body('working_hours.*.start_time').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
+    body('working_hours.*.end_time').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
+    body('breaks').optional().isArray(),
+    body('breaks.*.day_of_week').optional().isInt({ min: 0, max: 6 }),
+    body('breaks.*.start_time').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
+    body('breaks.*.end_time').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
+    body('time_off').optional().isArray(),
+    body('time_off.*.start_date').optional().isISO8601(),
+    body('time_off.*.end_date').optional().isISO8601(),
+    body('time_off.*.is_holiday').optional().isBoolean(),
+    body('time_off.*.reason').optional().isString(),
+  ]),
+  doctorController.saveScheduleSettings
 );
 
 /**

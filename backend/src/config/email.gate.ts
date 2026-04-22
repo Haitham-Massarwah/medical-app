@@ -30,6 +30,17 @@ export const EMAIL_GATE_ENABLED = ALLOWED_EMAIL_ADDRESSES.length > 1; // Enabled
  * Check if email can be sent to the given address
  */
 export function canSendEmail(to: string): boolean {
+  // In development, allow sending to any address so onboarding/testing flows work end-to-end.
+  if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
+    return true;
+  }
+
+  // Production: send to any recipient when set (required for real users on @gmail.com etc.).
+  // SMTP credentials remain the actual safeguard against abuse.
+  if (process.env.EMAIL_ALLOW_ALL_RECIPIENTS === 'true') {
+    return true;
+  }
+
   // If gate is disabled (no test accounts), block all emails
   if (!EMAIL_GATE_ENABLED) {
     return false;

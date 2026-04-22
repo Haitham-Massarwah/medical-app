@@ -1,15 +1,27 @@
 import { createClient, RedisClientType } from 'redis';
 import { logger } from './logger';
 
+function shouldUseRedis(): boolean {
+  const v = process.env.REDIS_ENABLED;
+  if (v === 'false') {
+    return false;
+  }
+  if (v === 'true') {
+    return true;
+  }
+  // Unset: off in development (avoids ECONNREFUSED log spam); on in production if you run Redis
+  return (process.env.NODE_ENV || 'development') === 'production';
+}
+
 class RedisClient {
   private client: RedisClientType | null = null;
   private isConnected: boolean = false;
   private redisEnabled: boolean = true;
+  private errorLogged = false;
 
   constructor() {
-    // Check if Redis should be enabled
-    const redisEnabled = process.env.REDIS_ENABLED !== 'false';
-    
+    const redisEnabled = shouldUseRedis();
+
     if (!redisEnabled) {
       logger.info('ℹ️  Redis is disabled - running without caching');
       this.redisEnabled = false;
@@ -17,17 +29,32 @@ class RedisClient {
     }
 
     try {
+      const allowReconnect = process.env.REDIS_RECONNECT === 'true';
       this.client = createClient({
         url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`,
         password: process.env.REDIS_PASSWORD || undefined,
         database: parseInt(process.env.REDIS_DB || '0'),
+        socket: {
+          reconnectStrategy(retries: number) {
+            if (!allowReconnect || retries > 8) {
+              return false;
+            }
+            return Math.min(retries * 150, 3000);
+          },
+        },
       });
 
-      this.client.on('error', (_err) => {
-        if (this.isConnected) {
-          logger.warn('⚠️  Redis connection error - continuing without cache');
-        }
+      this.client.on('error', () => {
+        const wasConnected = this.isConnected;
         this.isConnected = false;
+        if (wasConnected) {
+          logger.warn('⚠️  Redis connection error - continuing without cache');
+        } else if (!this.errorLogged) {
+          this.errorLogged = true;
+          logger.warn(
+            '⚠️  Redis unavailable - continuing without cache (set REDIS_ENABLED=false or start Redis)'
+          );
+        }
       });
 
       this.client.on('connect', () => {
@@ -49,12 +76,19 @@ class RedisClient {
 
   private async connect(): Promise<void> {
     if (!this.client) return;
-    
+
     try {
       await this.client.connect();
-    } catch (error) {
+    } catch {
       logger.warn('⚠️  Failed to connect to Redis - app will run without caching');
       this.redisEnabled = false;
+      this.isConnected = false;
+      try {
+        await this.client.disconnect();
+      } catch {
+        /* ignore */
+      }
+      this.client = null;
     }
   }
 

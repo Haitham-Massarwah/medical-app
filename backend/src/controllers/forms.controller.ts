@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import db from '../config/database';
 import { AuthorizationError, ValidationError } from '../middleware/errorHandler';
 
-const STAFF_ROLES = ['admin', 'developer', 'doctor', 'receptionist', 'paramedical'];
+const STAFF_ROLES = ['admin', 'developer', 'doctor', 'paramedical'];
 
 export class FormsController {
   async getTemplates(req: Request, res: Response): Promise<void> {

@@ -506,6 +506,29 @@ export const checkSMSServiceStatus = (): {
   };
 };
 
+/** True when Twilio can send (account + from number or messaging service). */
+export function isTwilioSmsConfigured(): boolean {
+  return !!(
+    process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_AUTH_TOKEN &&
+    (process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID)
+  );
+}
+
+/** Short templates for manual no-show AI actions (English). */
+export function buildNoShowSmsBody(
+  kind: 'reminder' | 'confirm',
+  patientFirstName: string,
+  appointmentHint?: string,
+): string {
+  const name = patientFirstName.trim() || 'there';
+  const hint = appointmentHint?.trim() ? ` ${appointmentHint.trim()}` : '';
+  if (kind === 'confirm') {
+    return `Hi ${name}, please confirm your upcoming appointment.${hint} Reply YES or call the clinic.`;
+  }
+  return `Reminder: you have an appointment coming up.${hint} We look forward to seeing you, ${name}.`;
+}
+
 
 
 

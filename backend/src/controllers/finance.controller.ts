@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import db from '../config/database';
 import { AuthorizationError, ValidationError } from '../middleware/errorHandler';
 
-const STAFF_ROLES = ['admin', 'developer', 'receptionist', 'doctor'];
+const STAFF_ROLES = ['admin', 'developer', 'doctor'];
 const ADMIN_ROLES = ['admin', 'developer'];
 
 export class FinanceController {
@@ -196,6 +196,135 @@ export class FinanceController {
       })
       .returning('*');
     res.status(201).json({ status: 'success', data: { rule } });
+  }
+
+  /**
+   * Stage 1: Calculate monthly dues per doctor/therapist.
+   * Stores results as scheduled payout rows (provider owes system).
+   */
+  async calculateMonthlyDues(req: Request, res: Response): Promise<void> {
+    this.ensureAdmin(req);
+    const tenantId = this.tenant(req);
+    const { month } = req.body || {};
+    const now = month ? new Date(`${month}-01T00:00:00.000Z`) : new Date();
+    const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const periodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
+
+    const rows = await db('appointments as a')
+      .leftJoin('doctors as d', 'a.doctor_id', 'd.id')
+      .where('a.tenant_id', tenantId)
+      .whereBetween('a.appointment_date', [periodStart, periodEnd])
+      .whereIn('a.status', ['completed', 'confirmed'])
+      .groupBy('d.user_id')
+      .select('d.user_id as provider_user_id')
+      .sum({ gross_amount: 'a.amount' });
+
+    const created: any[] = [];
+    for (const row of rows as Array<any>) {
+      if (!row.provider_user_id) continue;
+      const gross = Number(row.gross_amount || 0);
+      const commission = Number((gross * 0.2).toFixed(2));
+      const exists = await db('finance_payouts')
+        .where({
+          tenant_id: tenantId,
+          provider_user_id: row.provider_user_id,
+          period_start: periodStart,
+          period_end: periodEnd,
+        })
+        .first();
+      if (exists) continue;
+
+      const [payout] = await db('finance_payouts')
+        .insert({
+          tenant_id: tenantId,
+          provider_user_id: row.provider_user_id,
+          gross_amount: gross,
+          commission_amount: commission,
+          net_amount: gross - commission,
+          currency: 'ILS',
+          status: 'scheduled',
+          period_start: periodStart,
+          period_end: periodEnd,
+          notes: 'Monthly due calculation',
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .returning('*');
+      created.push(payout);
+    }
+
+    res.status(200).json({ status: 'success', data: { periodStart, periodEnd, created } });
+  }
+
+  /**
+   * Stage 2: Create charge intents placeholders.
+   */
+  async createDueChargeIntents(req: Request, res: Response): Promise<void> {
+    this.ensureAdmin(req);
+    const tenantId = this.tenant(req);
+    const { dry_run } = req.body || {};
+    const scheduled = await db('finance_payouts')
+      .where({ tenant_id: tenantId, status: 'scheduled' })
+      .select('*');
+
+    const updated: any[] = [];
+    for (const row of scheduled) {
+      const chargeIntentKey = `due_${row.id}_${new Date(row.period_start).toISOString().slice(0, 10)}`;
+      if (dry_run === true) {
+        updated.push({ ...row, simulated_charge_intent_key: chargeIntentKey });
+        continue;
+      }
+      const [next] = await db('finance_payouts')
+        .where({ id: row.id, tenant_id: tenantId })
+        .update({
+          status: 'processing',
+          notes: `${row.notes || ''}\ncharge_intent_key=${chargeIntentKey}\ncharge_intent_created=${new Date().toISOString()} provider_settlement=pending_provider`,
+          updated_at: new Date(),
+        })
+        .returning('*');
+      updated.push(next);
+    }
+
+    res.status(200).json({ status: 'success', data: { updated } });
+  }
+
+  /**
+   * Stage 3: Reconciliation report for paid/pending/issues.
+   */
+  async duesReconciliationReport(req: Request, res: Response): Promise<void> {
+    this.ensureAdmin(req);
+    const tenantId = this.tenant(req);
+    const rows = await db('finance_payouts').where({ tenant_id: tenantId }).select('*');
+    const report = {
+      paid: rows.filter((r) => r.status === 'paid'),
+      pending: rows.filter((r) => r.status === 'scheduled' || r.status === 'processing'),
+      issues: rows.filter((r) => r.status === 'failed' || r.status === 'cancelled'),
+    };
+    res.status(200).json({ status: 'success', data: report });
+  }
+
+  /**
+   * Reprocess failed/cancelled dues to scheduled.
+   */
+  async reprocessDue(req: Request, res: Response): Promise<void> {
+    this.ensureAdmin(req);
+    const tenantId = this.tenant(req);
+    const { id } = req.params;
+    const [payout] = await db('finance_payouts')
+      .where({ id, tenant_id: tenantId })
+      .whereIn('status', ['failed', 'cancelled'])
+      .update({
+        status: 'scheduled',
+        notes: db.raw("COALESCE(notes, '') || ?", [`\nreprocess_requested=${new Date().toISOString()}`]),
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    if (!payout) {
+      throw new ValidationError('Payout not found or not reprocessable');
+    }
+
+    res.status(200).json({ status: 'success', data: { payout } });
   }
 }
 

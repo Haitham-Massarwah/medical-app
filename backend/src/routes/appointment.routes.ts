@@ -4,12 +4,14 @@ import { authenticate } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validation.middleware';
 import { requireActiveSubscription, checkAppointmentLimit } from '../middleware/subscription.middleware';
 import { body, query, param } from 'express-validator';
+import { requireAccountPermission } from '../middleware/accountPermissions.middleware';
 
 const router = Router();
 const appointmentController = new AppointmentController();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requireAccountPermission('can_manage_doctors'));
 
 /**
  * @route   GET /api/v1/appointments
@@ -86,6 +88,16 @@ router.post(
     body('location').optional().isString().trim(),
     body('isTelehealth').optional().isBoolean(),
     body('patientId').optional().isUUID(),
+    body('guestPatient').optional().isObject(),
+    body('guestPatient.fullName').optional().isString().trim().notEmpty(),
+    body('guestPatient.phone').optional().isString().trim().notEmpty(),
+    body('guestPatient.email').optional().isEmail().normalizeEmail({ gmail_remove_dots: false }),
+    body('guestPatient.idNumber').optional().isString().trim(),
+    body().custom((value) => {
+      if (value.patientId) return true;
+      if (value.guestPatient?.fullName && value.guestPatient?.phone) return true;
+      throw new Error('Either patientId or guestPatient(fullName, phone) is required');
+    }),
     validateRequest,
   ],
   requireActiveSubscription,

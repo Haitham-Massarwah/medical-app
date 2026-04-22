@@ -5,6 +5,7 @@ import db from '../config/database';
 import { logger } from '../config/logger';
 import path from 'path';
 import fs from 'fs';
+import { insertAuditEventSafe } from '../services/auditLog.service';
 
 export class PatientController {
   /**
@@ -38,6 +39,7 @@ export class PatientController {
         'users.last_name',
         'users.email',
         'users.phone',
+        db.raw(`users.metadata->>'id_number' as id_number`),
       )
       .orderBy('patients.created_at', 'desc')
       .limit(limit)
@@ -74,7 +76,43 @@ export class PatientController {
         'users.first_name',
         'users.last_name',
         'users.email',
-        'users.phone'
+        'users.phone',
+        db.raw(`users.metadata->>'id_number' as id_number`)
+      )
+      .first();
+
+    if (!patient) {
+      throw new NotFoundError('Patient');
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        patient,
+      },
+    });
+  });
+
+  /**
+   * Get patient by Israeli ID (id_number)
+   * GET /api/v1/patients/by-israeli-id/:idNumber
+   */
+  getPatientByIsraeliId = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const { idNumber } = req.params;
+    const tenantId = req.tenantId!;
+    const normalizedIsraeliId = String(idNumber).replace(/\D/g, '').padStart(9, '0');
+
+    const patient = await db('patients')
+      .join('users', 'patients.user_id', 'users.id')
+      .where('patients.tenant_id', tenantId)
+      .andWhereRaw(`users.metadata->>'id_number' = ?`, [normalizedIsraeliId])
+      .select(
+        'patients.*',
+        'users.first_name',
+        'users.last_name',
+        'users.email',
+        'users.phone',
+        db.raw(`users.metadata->>'id_number' as id_number`)
       )
       .first();
 
@@ -98,12 +136,13 @@ export class PatientController {
     const tenantId = req.tenantId!;
     const creatorRole = req.user?.role || '';
     
-    // Doctors, admins, developers, receptionists (SRS Rev 02 intake)
-    if (!['doctor', 'admin', 'developer', 'receptionist'].includes(creatorRole)) {
+    // Doctors/Therapists, admins, and developers only.
+    if (!['doctor', 'admin', 'developer'].includes(creatorRole)) {
       throw new AuthorizationError('Only doctors and administrators can create patient accounts');
     }
 
     const {
+      id_number,
       email,
       password,
       first_name,
@@ -124,6 +163,10 @@ export class PatientController {
     if (!email) {
       throw new ValidationError('Email is required');
     }
+    if (!id_number) {
+      throw new ValidationError('Israeli ID is required');
+    }
+    const normalizedIsraeliId = String(id_number).replace(/\D/g, '').padStart(9, '0');
     const existingUser = await db('users')
       .where('email', email)
       .where('tenant_id', tenantId)
@@ -131,6 +174,14 @@ export class PatientController {
 
     if (existingUser) {
       throw new ValidationError('Email already registered');
+    }
+    const existingByIsraeliId = await db('users')
+      .where('tenant_id', tenantId)
+      .whereRaw(`metadata->>'id_number' = ?`, [normalizedIsraeliId])
+      .first();
+
+    if (existingByIsraeliId) {
+      throw new ValidationError('Israeli ID already registered');
     }
 
     // Hash password
@@ -149,6 +200,9 @@ export class PatientController {
           role: 'patient',
           tenant_id: tenantId,
           is_email_verified: false,
+          metadata: {
+            id_number: normalizedIsraeliId,
+          },
           created_at: new Date(),
           updated_at: new Date(),
         })
@@ -320,6 +374,20 @@ export class PatientController {
       })
       .returning('*');
 
+    await insertAuditEventSafe({
+      tenantId,
+      actorUserId: req.user?.userId,
+      entityType: 'medical_record',
+      entityId: record?.id,
+      action: 'create',
+      summary: 'Medical record created',
+      metadata: {
+        patient_id: patientId,
+        record_type: record.record_type,
+        appointment_id: record.appointment_id,
+      },
+    });
+
     res.status(201).json({
       status: 'success',
       data: {
@@ -369,6 +437,19 @@ export class PatientController {
       .where({ id: recordId, patient_id: patientId, tenant_id: tenantId })
       .update(updateData)
       .returning('*');
+
+    await insertAuditEventSafe({
+      tenantId,
+      actorUserId: req.user!.userId,
+      entityType: 'medical_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Medical record updated',
+      metadata: {
+        patient_id: patientId,
+        fields: Object.keys(updateData).filter((k) => k !== 'updated_at'),
+      },
+    });
 
     res.status(200).json({
       status: 'success',
@@ -535,6 +616,19 @@ export class PatientController {
         attachments: updatedAttachments,
         updated_at: new Date(),
       });
+
+    await insertAuditEventSafe({
+      tenantId,
+      actorUserId: req.user!.userId,
+      entityType: 'medical_record',
+      entityId: recordId,
+      action: 'attachment_upload',
+      summary: 'Medical record attachments uploaded',
+      metadata: {
+        patient_id: patientId,
+        file_count: files.length,
+      },
+    });
 
     res.status(200).json({
       status: 'success',

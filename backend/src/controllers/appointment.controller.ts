@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { AppointmentService } from '../services/appointment.service';
 import { logger } from '../config/logger';
 import { ApiError } from '../utils/apiError';
+import db from '../config/database';
 
 export class AppointmentController {
   private appointmentService: AppointmentService;
@@ -20,6 +23,97 @@ export class AppointmentController {
       throw new ApiError(400, 'Tenant ID not found');
     }
     return tenantId;
+  }
+
+  private async resolvePatientIdForBooking(
+    tenantId: string,
+    body: any
+  ): Promise<{ patientId: string; guestSnapshot?: Record<string, unknown> }> {
+    const directPatientId = (body?.patientId || '').toString().trim();
+    if (directPatientId) {
+      return { patientId: directPatientId };
+    }
+
+    const guest = body?.guestPatient || {};
+    const fullName = (guest.fullName || '').toString().trim();
+    const phone = (guest.phone || '').toString().trim();
+    const email = (guest.email || '').toString().trim().toLowerCase();
+    const idNumber = (guest.idNumber || '').toString().trim();
+
+    if (!fullName || !phone) {
+      throw new ApiError(400, 'Either patientId or guestPatient(fullName, phone) is required');
+    }
+
+    // Reuse existing patient by tenant+email when available.
+    if (email) {
+      const existing = await db('patients as p')
+        .join('users as u', 'p.user_id', 'u.id')
+        .where('p.tenant_id', tenantId)
+        .andWhereRaw('LOWER(u.email) = ?', [email])
+        .select('p.id')
+        .first();
+      if (existing?.id) {
+        return {
+          patientId: String(existing.id),
+          guestSnapshot: { fullName, phone, email, idNumber },
+        };
+      }
+    }
+
+    const userColumnsRaw = await db('information_schema.columns')
+      .where({ table_name: 'users' })
+      .select('column_name');
+    const userColumns = new Set(userColumnsRaw.map((r: any) => String(r.column_name)));
+    const hasIsActive = userColumns.has('is_active');
+
+    const parts = fullName.split(/\s+/).filter((s: string) => s.length > 0);
+    const firstName = parts.length > 0 ? parts[0] : 'Guest';
+    const lastName = parts.length > 1 ? parts.slice(1).join(' ') : 'Patient';
+    const generatedEmail =
+      email.length > 0
+          ? email
+          : `guest_${Date.now()}_${phone.replace(/[^0-9]/g, '')}@guest.local`;
+    const randomPasswordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+
+    let newPatientId = '';
+    await db.transaction(async (trx) => {
+      const [newUser] = await trx('users')
+        .insert({
+          tenant_id: tenantId,
+          email: generatedEmail,
+          password_hash: randomPasswordHash,
+          first_name: firstName,
+          last_name: lastName,
+          phone: phone || null,
+          role: 'patient',
+          is_email_verified: false,
+          ...(hasIsActive ? { is_active: true } : {}),
+          metadata: {
+            guest_booking: true,
+            source: 'reception_booking',
+            id_number: idNumber || null,
+            original_name: fullName,
+          },
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .returning(['id']);
+
+      const [newPatient] = await trx('patients')
+        .insert({
+          user_id: newUser.id,
+          tenant_id: tenantId,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .returning(['id']);
+      newPatientId = String(newPatient.id);
+    });
+
+    return {
+      patientId: newPatientId,
+      guestSnapshot: { fullName, phone, email: generatedEmail, idNumber },
+    };
   }
 
   /**
@@ -127,6 +221,7 @@ export class AppointmentController {
         location,
         isTelehealth,
         patientId,
+        guestPatient,
       } = req.body;
 
       // Validate required fields
@@ -134,22 +229,28 @@ export class AppointmentController {
         throw new ApiError(400, 'Doctor ID and appointment date are required');
       }
 
-      // Check availability
-      const isAvailable = await this.appointmentService.checkAvailability({
-        doctorId,
-        appointmentDate: new Date(appointmentDate),
-        durationMinutes: durationMinutes || 30,
-        tenantId,
-      });
-
-      if (!isAvailable) {
-        throw new ApiError(409, 'The selected time slot is not available');
+      const role = (req.user?.role as string) || 'admin';
+      let resolved: { patientId: string; guestSnapshot?: Record<string, unknown> };
+      if (!patientId && role === 'patient') {
+        const selfPatient = await db('patients')
+          .where({ tenant_id: tenantId, user_id: userId })
+          .select('id')
+          .first();
+        if (!selfPatient?.id) {
+          throw new ApiError(404, 'Patient profile not found');
+        }
+        resolved = { patientId: String(selfPatient.id) };
+      } else {
+        resolved = await this.resolvePatientIdForBooking(tenantId, {
+          patientId,
+          guestPatient,
+        });
       }
 
-      // Book appointment
-      const appointment = await this.appointmentService.bookAppointment({
+      // Availability + overbooking enforced atomically inside bookAppointment
+      const { appointment, booking_meta } = await this.appointmentService.bookAppointment({
         tenantId,
-        patientId: patientId || userId, // If patient books for themselves
+        patientId: resolved.patientId || userId, // If patient books for themselves
         doctorId,
         serviceId,
         appointmentDate: new Date(appointmentDate),
@@ -158,6 +259,8 @@ export class AppointmentController {
         location,
         isTelehealth: isTelehealth || false,
         bookedBy: userId,
+        actorRole: role,
+        guestPatient: resolved.guestSnapshot,
       });
 
       logger.info(`Appointment booked: ${appointment.id}`);
@@ -165,6 +268,7 @@ export class AppointmentController {
       res.status(201).json({
         success: true,
         data: appointment,
+        booking_meta,
         message: 'Appointment booked successfully',
       });
     } catch (error) {
