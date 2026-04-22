@@ -7,7 +7,10 @@ import {
   sendAppointmentReminderTemplate,
   sendWhatsApp,
   checkWhatsAppServiceStatus,
+  getPostBookingAppointmentMessageText,
+  type AppointmentTemplateData,
 } from './whatsapp.service';
+import { sendTelegramMessage } from './telegram.service';
 import { canSendEmail, isEmailEnabled } from '../config/email.gate';
 import { sendAppointmentConfirmation } from './email.service';
 import { createTelegramLinkUrlForUser } from './telegramLink.service';
@@ -147,6 +150,82 @@ export class AppointmentSmsAutomationService {
     }
 
     await tryEmailIfNoTelegram();
+  }
+
+  /**
+   * After the patient links Telegram in the bot, send the same confirmation text as
+   * post-booking would use (risk-aware), only to Telegram — does not re-send WhatsApp/SMS.
+   */
+  async resendLastBookingConfirmationToTelegramAfterLink(
+    userId: string,
+    chatId: string,
+  ): Promise<void> {
+    const enabled =
+      String(process.env.TELEGRAM_RESEND_LAST_BOOKING_ON_LINK ?? 'true').toLowerCase() !== 'false';
+    if (!enabled) {
+      return;
+    }
+
+    const row = await db('appointments as a')
+      .join('patients as p', 'a.patient_id', 'p.id')
+      .join('users as u', 'p.user_id', 'u.id')
+      .join('doctors as d', 'a.doctor_id', 'd.id')
+      .join('users as du', 'd.user_id', 'du.id')
+      .leftJoin('tenants as t', 'a.tenant_id', 't.id')
+      .where('u.id', userId)
+      .whereNotIn('a.status', ['cancelled'])
+      .where('a.appointment_date', '>=', new Date())
+      .orderBy('a.created_at', 'desc')
+      .select(
+        'a.id as appointment_id',
+        'a.appointment_date',
+        'a.location',
+        'u.first_name as patient_first',
+        'du.first_name as doctor_first',
+        'du.last_name as doctor_last',
+        't.name as clinic_name',
+        't.address as clinic_address',
+      )
+      .first();
+
+    if (!row) {
+      logger.info('Telegram link: no upcoming non-cancelled appointment to resend confirmation', {
+        userId,
+      });
+      return;
+    }
+
+    const appointmentId = String(row.appointment_id);
+    const pred = await db('appointment_no_show_predictions')
+      .where({ appointment_id: appointmentId, is_current: true })
+      .first();
+    const riskLevel = String(pred?.risk_level || 'low').toLowerCase();
+
+    const apptDate = new Date(row.appointment_date);
+    const local = utcToZonedTime(apptDate, tz);
+    const dateStr = format(local, 'yyyy-MM-dd');
+    const timeStr = format(local, 'HH:mm');
+    const doctorName = `${String(row.doctor_first || '').trim()} ${String(row.doctor_last || '').trim()}`.trim();
+    const patientName = String(row.patient_first || '').trim() || 'Patient';
+    const clinicName = String(row.clinic_name || '').trim();
+    const clinicAddress = String(row.clinic_address || row.location || '').trim();
+
+    const data: AppointmentTemplateData = {
+      patientName,
+      doctorName,
+      clinicName,
+      clinicAddress,
+      date: dateStr,
+      time: timeStr,
+    };
+
+    const text = getPostBookingAppointmentMessageText(data, riskLevel, patientName, dateStr, timeStr);
+    const body = `עדכון: אישור התור שלך (לאחר חיבור טלגרם)\n\n${text}`;
+
+    const ok = await sendTelegramMessage(chatId, body);
+    if (ok) {
+      logger.info('Telegram: resent last booking confirmation after link', { userId, appointmentId });
+    }
   }
 
   private async reminderSweepOnce(): Promise<void> {

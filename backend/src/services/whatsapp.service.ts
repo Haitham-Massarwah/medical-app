@@ -10,6 +10,7 @@ import {
 import { sendSMS } from './sms.service';
 import { createTelegramLinkUrlForUser } from './telegramLink.service';
 import { isTelegramConfigured, sendTelegramMessage } from './telegram.service';
+import { buildNoShowSmsBody } from './sms.service';
 
 /**
  * Messaging service (WhatsApp + Telegram).
@@ -443,6 +444,27 @@ const renderReminderBody = (data: AppointmentTemplateData): string => [
   '',
   'אנא ודא/י הגעה בזמן.',
 ].join('\n');
+
+/**
+ * Same plain-text body as post-booking dispatch (no WhatsApp), for Telegram-only
+ * resend right after the user links Telegram.
+ */
+export const getPostBookingAppointmentMessageText = (
+  data: AppointmentTemplateData,
+  riskLevel: string,
+  patientName: string,
+  dateStr: string,
+  timeStr: string,
+): string => {
+  const r = String(riskLevel || 'low').toLowerCase();
+  if (r === 'high') {
+    return buildNoShowSmsBody('confirm', patientName, `${dateStr} ${timeStr}`);
+  }
+  if (r === 'medium') {
+    return renderReminderBody(data);
+  }
+  return renderConfirmationBody(data);
+};
 
 /**
  * When Telegram is preferred but the user has not linked, send SMS or WhatsApp

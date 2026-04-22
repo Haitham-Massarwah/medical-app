@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import db from '../config/database';
 import { logger } from '../config/logger';
 import { createTelegramLinkUrlForUser } from '../services/telegramLink.service';
+import { appointmentSmsAutomationService } from '../services/appointmentSmsAutomation.service';
 import {
   getTelegramBotUsername,
   getTelegramWebhookSecret,
@@ -195,6 +196,16 @@ export const telegramWebhook = async (req: Request, res: Response): Promise<void
       chatId,
       'הקישור בוצע בהצלחה. מעכשיו תקבלו כאן הודעות על תורים ותזכורות.',
     );
+
+    try {
+      await appointmentSmsAutomationService.resendLastBookingConfirmationToTelegramAfterLink(
+        String(tokenRow.user_id),
+        chatId,
+      );
+    } catch (resendErr: unknown) {
+      const message = resendErr instanceof Error ? resendErr.message : String(resendErr);
+      logger.warn('Telegram resend last booking after link failed', { message });
+    }
 
     logger.info('Telegram user linked', { userId: tokenRow.user_id, chatId });
 
